@@ -1866,7 +1866,7 @@ CONTAINS
     integer n_rows,row,n_haml,n_gnfu,nres,mynres,n1,n2,map_term
     integer,external :: select_ptc_idx, minimum_acceptable_order, &
          string_from_table, double_from_table, result_from_normal
-    real(dp) x(6),deltap0,deltap,mypt,map_coor(i_map_coor)
+    real(dp) x(6),deltap0,deltap,dt
     !type(real_8) y(6)
     integer :: column(6) = (/1,0,0,0,0,0/)
     integer :: ord(3), indexa(4)
