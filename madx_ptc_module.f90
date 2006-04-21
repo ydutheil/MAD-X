@@ -19,6 +19,7 @@ MODULE madx_ptc_module
 
   implicit none
   public
+  logical(lp) mytime
   integer icav
   integer :: universe=0,index=0,EXCEPTION=0
   integer ipause
@@ -37,14 +38,14 @@ MODULE madx_ptc_module
   character(len=5), private, dimension(5), parameter :: str5 = (/'10000','01000','00100','00010','00001'/)
   character(len=6), private, dimension(6), target :: str6 = (/'100000','010000','001000','000100','000001','000010'/)
   private zerotwiss,equaltwiss,alloctwiss,killtwiss
-  real(dp) :: mux_default=0.28, muy_default=0.31, muz_default=0.001
+  real(dp) :: mux_default=c_0_28, muy_default=c_0_31, muz_default=c_1d_3
   type twiss
      type(damap) a1
      type(damap) a_t
      type(damap) junk
      type(damap) junk1
      type(normalform) n
-     logical nf
+     logical(lp) nf
      real(dp), dimension(3,3) ::  beta,alfa,gama
      real(dp), dimension(3)   ::  mu
      real(dp), dimension(6)   ::  disp
@@ -88,7 +89,7 @@ CONTAINS
 
   subroutine ptc_create_layout()
     implicit none
-    type (internal_state)  :: state
+    real(kind(1d0)) get_value
 
     if(universe.le.0) then
        call fort_warn('return from ptc_create_layout: ',' no universe created')
@@ -107,6 +108,13 @@ CONTAINS
     endif
 
     cavsareset = .false.
+    mytime=get_value('ptc_create_layout ','time ').ne.0
+
+    if(mytime) then
+       default=getintstate()
+       default=default+time
+       call setintstate(default)
+    endif
 
   end subroutine ptc_create_layout
   !_________________________________________________________________
@@ -148,7 +156,7 @@ CONTAINS
     real(dp) f_errors(0:50),aperture(maxnaper),normal(0:maxmul)
     real(dp) patch_ang(3),patch_trans(3)
     real(dp) skew(0:maxmul),field(2,0:maxmul),fieldk(2)
-    real(dp) gamma,gammatr,gamma2,gammatr2,freq,offset_deltap
+    real(dp) gamma,gamma2,gammatr2,freq,offset_deltap
     real(dp) fint,fintx,div,muonfactor
     real(dp) sk1,sk1s,sk2,sk2s,sk3,sk3s,tilt
     REAL(dp) ::  normal_0123(0:3), skew_0123(0:3) ! <= knl(1), ksl(1)
@@ -718,7 +726,9 @@ CONTAINS
        key%list%lag=node_value('lag ')*twopi
        offset_deltap=get_value('ptc_create_layout ','offset_deltap ')
        if(offset_deltap.ne.zero) then
+          default = getintstate()
           default=default+totalpath0
+          call setintstate(default)
           freq=freq*((gammatr2-gamma2)*offset_deltap/gammatr2/gamma2+one)
        endif
        key%list%freq0=freq
@@ -781,7 +791,9 @@ CONTAINS
        key%list%lag=node_value('lag ')*twopi
        offset_deltap=get_value('ptc_create_layout ','offset_deltap ')
        if(offset_deltap.ne.zero) then
+          default = getintstate()
           default=default+totalpath0
+          call setintstate(default)
           freq=freq*((gammatr2-gamma2)*offset_deltap/gammatr2/gamma2+one)
        endif
        key%list%freq0=freq
@@ -957,7 +969,7 @@ CONTAINS
     integer              :: i, ii  !iterators
     character(200)       :: filename='ptcmaps.txt'
     integer              :: get_string
-    real(kind(1.d0))     :: get_value
+    real(kind(1d0))      :: get_value
     integer              :: flag_index,why(9)
 
 
@@ -978,7 +990,7 @@ CONTAINS
     call alloc(id);
     call alloc(y2);
 
-    xt(:) = 0.d0
+    xt(:) = zero
     id    = 1     ! making identity map
 
     p=>my_ring%start
@@ -1071,13 +1083,13 @@ CONTAINS
     integer k,i,ii,no,mynd2,npara,nda,icase,flag_index,why(9),my_nv,nv_min
     integer inval,ioptfun,iii,restart_sequ,advance_node,get_option
     integer tab_name(*)
-    real(dp) x(6),suml,deltap0,deltap,mypt,betx,alfx,mux,bety,alfy,muy,betz,alfz,muz,dx,dpx,dy,dpy
-    real(kind(1d0)) get_value
+    real(dp) x(6),deltap0,deltap,betx,alfx,mux,bety,alfy,muy,betz,alfz,muz,dx,dpx,dy,dpy,d_val
+    real(kind(1d0)) get_value,suml
     type(real_8) y(6)
     type(twiss) tw
     type(fibre), POINTER :: current
     type(work)   :: startfen !Fibre energy at the start
-    real(dp) r,re(6,6),d_val
+    real(dp) r,re(6,6),dt
     logical(lp) initial_matrix_manual, initial_matrix_table
     integer n_vector,order,nx,nxp,ny,nyp,nt,ndeltap
     integer row,double_from_table
@@ -1112,9 +1124,12 @@ CONTAINS
     
     
     x(:)=zero
-    mypt=zero
-    call Convert_dp_to_dt(deltap,mypt)
-    if(icase.eq.5) x(5)=mypt
+    if(mytime) then
+       call Convert_dp_to_dt (deltap, dt)
+    else
+       dt=deltap
+    endif
+    if(icase.eq.5) x(5)=dt
 
     closed_orbit = get_value('ptc_twiss ','closed_orbit ') .ne. 0
 
@@ -1157,7 +1172,8 @@ CONTAINS
        allocate(j(iia(2)))
        j(:)=0
        do i = 1,my_nv
-          k   = double_from_table("map_table ", "coef ", i, d_val)
+          k   = double_from_table("map_table ", "coef ", i, doublenum)
+          d_val=doublenum
           if(i.le.iia(2)) then
              x(i)  = d_val-(y(i)%T.sub.j)
           endif
@@ -1166,7 +1182,8 @@ CONTAINS
           do ii = 1,nv_min
              j(ii)  = 1
              row    = i*my_nv+ii
-             k   = double_from_table("map_table ", "coef ", row, d_val)
+             k   = double_from_table("map_table ", "coef ", row, doublenum)
+             d_val=doublenum
              d_val  = d_val-(y(i)%T.sub.j)
              y(i)%T = y(i)%T+(d_val.mono.j)
              j(ii)=0
@@ -1299,8 +1316,8 @@ CONTAINS
       call print(y,21)
 
       call double_to_table(table_name, 's ', suml)
-
-      call double_to_table(table_name, 'energy ', current%mag%p%p0c)
+      doublenum=current%mag%p%p0c
+      call double_to_table(table_name, 'energy ', doublenum)
 
       opt_fun(:)=zero
       call liepeek(iia,icoast)
@@ -1548,14 +1565,13 @@ CONTAINS
     USE ptc_results
     implicit none
     real(dp) double_from_ptc
-    real(dp) :: d_val = 0.0
     character (len = *) var
     integer :: column(*)
     integer j,k,n1,n2,nn,var_length,ptc_variable_length,ind(6)
     integer double_from_table, string_from_table
-    logical var_check
+    logical(lp) var_check
 
-    double_from_ptc = 0.0
+    double_from_ptc = zero
     var_length = LEN(ptc_var)
     do j = 1 , number_variables
        ptc_variable_length = LEN(ptc_variables(j))
@@ -1600,7 +1616,7 @@ CONTAINS
     character(len = 3)  name_var2
 
     name_l = .false.
-    double_from_ptc_normal = 0.0
+    double_from_ptc_normal = zero
 
     name_var1 = name_var
     SELECT CASE (name_var1)
@@ -1735,7 +1751,7 @@ CONTAINS
           double_from_ptc_normal = SQRT(d_val1**2 + d_val2**2)
           RETURN
        CASE ('haml')
-          double_from_ptc_normal = 0.0D0
+          double_from_ptc_normal = zero
           RETURN
        CASE ('gnfc')
           k = double_from_table("normal_results ", "order1 ", row, doublenum)
@@ -1781,7 +1797,7 @@ CONTAINS
           double_from_ptc_normal = SQRT(d_val1**2 + d_val2**2)
           RETURN
        CASE ('gnfu')
-          double_from_ptc_normal = 0.0D0
+          double_from_ptc_normal = zero
           RETURN
        CASE ('eign')
           ii=(icase/2)*2
@@ -1880,8 +1896,12 @@ CONTAINS
     CALL UPDATE_STATES
 
     x(:)=zero
-    call Convert_dp_to_dt(deltap,mypt)
-    if(icase.eq.5) x(5)=mypt
+    if(mytime) then
+       call Convert_dp_to_dt (deltap, dt)
+    else
+       dt=deltap
+    endif
+    if(icase.eq.5) x(5)=dt
     closed_orbit = get_value('ptc_normal ','closed_orbit ') .ne. 0
     if(closed_orbit) then
        call find_orbit(my_ring,x,1,default,c_1d_7)
@@ -2085,7 +2105,7 @@ CONTAINS
     implicit none
     integer i,nint,ndble,nchar,int_arr(1),char_l,icase,turns,flag_index,why(9)
     integer j,next_start
-    real(dp) x0(6),x(6),deltap0,deltap,mypt
+    real(dp) x0(6),x(6),deltap0,deltap,dt
     real(dp)  xx,pxx,yx,pyx,tx,deltaex,fxx,phixx,fyx,phiyx,ftx,phitx
     real(kind(1d0)) get_value
     logical(lp) closed_orbit
@@ -2114,8 +2134,12 @@ CONTAINS
     endif
 
     x0(:)=zero
-    call Convert_dp_to_dt(deltap,mypt)
-    if(icase.eq.5) x0(5)=deltap
+    if(mytime) then
+       call Convert_dp_to_dt (deltap, dt)
+    else
+       dt=deltap
+    endif
+    if(icase.eq.5) x0(5)=dt
     closed_orbit = get_value('ptc_track ','closed_orbit ') .ne. 0
     if(closed_orbit) then
        call find_orbit(my_ring,x0,1,default,c_1d_7)
@@ -2551,8 +2575,6 @@ CONTAINS
       print*, "icase=",icase," deltap=",deltap," deltap0=",deltap0
     endif
     
-    
-      
     deltap = zero
     select case(icase)
     CASE(4)
@@ -2566,7 +2588,6 @@ CONTAINS
        i=5
     CASE(6)
        i=6
-       default=default+time
     CASE DEFAULT
        default=default+only_4d+NOCAVITY
        i=4
@@ -2596,7 +2617,7 @@ CONTAINS
   subroutine f90flush(i,option)
     implicit none
     integer i,ios
-    logical ostat, fexist,option
+    logical(lp) ostat, fexist,option
     character*20 faction,faccess,fform,fwstat
     character*255 fname
     inquire(err=1,iostat=ios,&
@@ -2656,7 +2677,7 @@ CONTAINS
     ! to get "energy" value
     Call GET_ONE(MASS_GeV,ENERGY,KINETIC,BRHO,BETA0,P0C,gamma0I,gambet)
 
-    IF (beta0.gt.0.0 ) THEN
+    IF (beta0.gt.zero ) THEN
        dt=SQRT(deltap*(deltap+two)+one/beta0/beta0)-one/beta0
     ELSE  ! exculde devision by 0
        call aafail('SUBR. Convert_dp_to_dt: ',' CALL GET_ONE => beta0.LE.0')
