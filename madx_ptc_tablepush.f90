@@ -43,9 +43,9 @@ contains
     character(*)   :: name !fibre name
     type(real_8),target  :: y(6)!input 6 dimensional function (polynomial)
     type(real_8),pointer :: e !element in array
-    real(dp)        :: coeff
-    integer         :: i,ii !iterator
-    integer         :: at !iterator
+    real(kind(1d0))      :: coeff
+    integer              :: i,ii !iterator
+    integer              :: at !iterator
 
     !    print *,"madx_ptc_tablepush :putusertable "
     !    call daprint(y(1),6)
