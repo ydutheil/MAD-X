@@ -67,6 +67,9 @@ void match2_end(struct in_cmd* cmd)
   current_calls = 0;
   total_const = 0;
   set_option("twiss_print", &keep_tw_print);
+  print_match_summary = 0;
+  set_option("match_summary", &print_match_summary);
+
 
   fprintf(prt_file, "EVALUATING \"tar= %16.8e;\"\n",penalty);
 /*  sprintf(assign_cmd,"tar= %16.8e ;",penalty);*/
@@ -100,7 +103,6 @@ void match2_constraint(struct in_cmd* cmd)
   int start,end;
   char **toks=cmd->tok_list->p;
   int n = cmd->tok_list->curr;
-  struct command* comm=cmd->clone;
   struct expression* expr = NULL;
   char* cname;
   char s;

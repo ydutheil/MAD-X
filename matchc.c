@@ -846,7 +846,6 @@ void match_weight(struct in_cmd* cmd)
 
 void mtjacprint(int m, int n,double* jac){
   int i,j,k,l;
-  struct command* comm;
   k=0;
   printf("Macro Constraint Variable Derivative\n");
   printf("------------------------------------\n");
