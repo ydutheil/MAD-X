@@ -107,6 +107,7 @@ void match2_constraint(struct in_cmd* cmd)
   char* cname;
   char s;
 
+  i=0;j=0;s='n';
   for(start=0; start<n; start++) {
     if (strcmp(toks[start],"expr")==0) break;
   }
