@@ -7865,7 +7865,7 @@ void pro_ptc_select(struct in_cmd* cmd)
   pos = name_list_pos("name",aTable->columns);
   if (pos < 0)
    {
-     printf("madxn.c: pro_ptc_select","There  column named <<name>> in table <<%s>>.\n",aTable->name);
+     warning("madxn.c: pro_ptc_select","There  column named <<name>> in table <<%s>>.\n",aTable->name);
      return;
    }
 

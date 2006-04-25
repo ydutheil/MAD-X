@@ -4337,137 +4337,38 @@ int table_row(struct table* table, char* name)
 double table_value()
 {
   double val = zero;
-  int ntok, pos, col=-1, row=-1;
+  int ntok, pos, col, row;
   char** toks;
   struct table* table;
-
-  /*
-    if (current_variable != NULL && current_variable->string != NULL)
-    the above was dengerous - in C standard there is no requirement that 
-    if first part is false then second is not evaluated!!!
-  */  
-  
-  if (current_variable == NULL)
-   {
-     warning("table_value","current_variable is NULL. Returning 0.0");
-     return 0.0;
-   }
-
-  if (current_variable->string == NULL)
-   {
-     warning("table_value","current_variable->string is NULL. Returning 0.0");
-     return 0.0;
-   }
-  
-  if (debuglevel > 2) printf("Current variable <<%s>>\n", current_variable->string);
-  
-  strcpy(c_dum->c, current_variable->string);
-  supp_char(',', c_dum->c);
-  mysplit(c_dum->c, tmp_p_array);
-  toks = tmp_p_array->p; 
-  ntok = tmp_p_array->curr;
-  
-  if (debuglevel > 2) printf("table_value: There is %d tokens in the command.\n", ntok);
-  
-  if (ntok < 2) 
-   {
-     warning("table_value","Number of tokens is smaller then 2 (%d). Returning 0.0 \n",ntok);
-     return 0.0;
-   }
-
-  pos = name_list_pos(toks[0], table_register->names);
-  if (pos < 0)
-   {
-     warning("table_value","Can not find <<%s>> in table register. Returning 0.0 \n",toks[0]);
-     return 0.0;
-   } 
-
-
-  table = table_register->tables[pos];
-  /*Good We got the table*/
-
-  col = name_list_pos(toks[ntok-1], table->columns);
-  
-  if (col < 0)
-   {/*column name is not the last i.e. format is (tabname, colname, int row)*/
-    
-     if (ntok != 3)
-      {/*bad syntax*/
-        warning("table_value",
-                "Table <<%s>> does not contain column <<%s>> . Returning 0.0\n",
-                table->name,toks[ntok-1]);  
-        return 0.0;
-      }
-     
-     /*column name is in the second position*/
-     col = name_list_pos(toks[1], table->columns);
-     if (col < 0)
-      {
-        warning("table_value",
-                "Table <<%s>> does not contain column <<%s>> . Returning 0.0\n",
-                table->name,toks[1]);  
-        return 0.0;
-        
-      }
-     /*convert last argument to integer*/
-     errno = 0;
-     row = strtol(toks[2],NULL,10) - 1;
-     if (errno)
-      {
-        warning("table_value",
-                "Error occured while converting <<%s>> to integer. Returning 0.0\n",toks[2]);
-
-        return 0.0;    
-      }
-     /*we have row number!!!*/ 
-  }
- else
+  if (current_variable != NULL && current_variable->string != NULL)
   {
-   if(debuglevel>2) printf("Token %d describes column number %d named %s \n",ntok-1,col,toks[ntok-1]);
-   
-   if (ntok == 2)
-    { /*this is (tabname,colname) sytnax*/
-      if (table->dynamic)  
-       {
-         if(debuglevel>2) 
-           printf("table_value: Table <<%s>> is dynamic: taking the currnet row %d\n",table->name,table->curr);
-         row = table->curr;
-       }  
-      else 
-       {
-         if(debuglevel>2) 
-           printf("table_value: Table <<%s>> is not dynamic: taking the 0th row %d\n",table->name);
-         row = 0;
-       }  
-    }
-   else /* ntok > 2*/
+    strcpy(c_dum->c, current_variable->string);
+    supp_char(',', c_dum->c);
+    mysplit(c_dum->c, tmp_p_array);
+    toks = tmp_p_array->p; ntok = tmp_p_array->curr;
+    if (ntok > 1)
     {
-     /*this is (tabname,elname,colname) sytnax*/
-      row = table_row(table, toks[1]);
-      if (row < 0)
-       {
-         warning("table_value","Row named <<%s>> does not exist. Trying upper case.", toks[1]);
-         row = table_row(table, stoupper(toks[1]));
-         if (row < 0)
+      if ((pos = name_list_pos(toks[0], table_register->names)) > -1)
+      {
+        table = table_register->tables[pos];
+        if ((col = name_list_pos(toks[ntok-1], table->columns)) > -1)
+        {
+          if (ntok > 2)  /* find row - else current (dynamic), or 0 */
           {
-            warning("table_value","Row named <<%s>> neither exists. Return 0.0.", stoupper(toks[1]));
-            return 0.0;
+            row = table_row(table, toks[1]);
           }
-         else warning("table_value","Upper case found!!!!!");
-       }
-      if(debuglevel>1) printf("Found the row at position %d\n",row); 
+          else if (table->dynamic)  row = table->curr;
+          else row = 0;
+          val = table->d_cols[col][row];
+        }
+        else if ((ntok == 3) && ((col = name_list_pos(toks[1], table->columns)) > -1))
+        {
+          row = atoi(toks[2])-1;
+          if(row < table->curr) val = table->d_cols[col][row];
+        }
+      }
     }
   }
-
-   
-  /*Here we have VALID column */ 
-
-  if( (row < table->curr) && (row>=0)) 
-   {
-     val = table->d_cols[col][row];
-   } 
-  
-  if (debuglevel > 2 ) printf("table_value: Current variable <<%s>> = %f\n", current_variable->string,val);
   return val;
 }
 

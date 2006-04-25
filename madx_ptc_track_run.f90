@@ -220,7 +220,7 @@ CONTAINS
     ! ELSE (default) output tables with standard coord.
     Normal_Order_n0=1   !
     x_coord_co(:)=zero
-
+                     x_input_0_by_ptc_track_command(:)=zero
     CALL Values_from_ptc_track_command ! Int. proc. in this subr.(see below in the file)
     ! read command line from input file :
     ! Example: ptc_track,icase=5, coord=0.01,0.,0.01,0.,0.,0.;
@@ -501,7 +501,8 @@ CONTAINS
       character*12 tol_a, char_a
       integer :: nint,ndble, nchar, int_arr(1),char_l
       data tol_a,char_a / 'maxaper ', ' ' /
-
+      !defaults
+      int_arr(:)=1; char_l=1
       ! Values of "ptc_track" command: (PTC thick lens tracking module)
       !                                                                      DEFAULT
       !  icase:         Phase-space (4, 5 or 6)                                (4)
@@ -538,6 +539,7 @@ CONTAINS
       ! "norm_no  = [i, 1], "
       ! "debug    = [l, false, true]; " - only for developer (not for User)
 
+      
       icase_ptc    = get_value('ptc_track ','icase ')
 
       turns        = get_value('ptc_track ','turns ')
@@ -1460,6 +1462,11 @@ CONTAINS
                   x_coord_co_temp(k_th_coord)= &                                  !    #              *
                        x_co_at_all_observ(k_th_coord,number_observation_point)    !    #              *
                ENDDO extract_CO_at_observ_point                                   !    #              *
+                  if (ptc_track_debug) THEN !+++debug print+++++++!               !    #              *
+                    Print *,'obs.No=',number_observation_point    !               !    #              *
+                    Print *,'CO=', x_coord_co_temp                !               !    #              *
+                    Print *,'x_coord_incl_co=', x_coord_incl_co   !               !    #              *                     
+                  endif !+++++++++++++++++++++++++++++++++++++++++!               !    #              *
                !                                                                  !    #              *
                if (ptc_onetable) then !>>>>> onetable=.TRUE.>>>>>>>>>>>>>>>>!     !    #              *
                   !                                                         !     !    #              *
@@ -1960,6 +1967,14 @@ CONTAINS
          length_current_element_c=node_value('l ')
          Sum_length_S=Sum_length_S+length_current_element_f90
 
+         find_CO_for_el_by_el: IF (element_by_element) THEN !===!
+            IF (closed_orbit) THEN !-------------------------!  !
+              Call track(my_ring,x_coord_co_temp, &          !  !
+              i_ring_element, i_ring_element+1, default )    !  !
+            ELSE                                             !  !
+              x_coord_co_temp(:)=zero                        !  !
+            ENDIF !------------------------------------------!  !
+         ENDIF find_CO_for_el_by_el !===========================!
 
          IF(number_obs.GT.0) THEN
             elem_number_at_observ(number_obs)= i_ring_element
@@ -1979,15 +1994,14 @@ CONTAINS
             Print *, ' l_c_code=',length_current_element_c,' l_f90=', &
                  length_current_element_f90, &
                  ' name_c=', name_16, ' &_f90=', current%MAG%name
+            Print *, 'x_coord_co_temp=', x_coord_co_temp
+                 
          endif
 
-         find_CO_for_el_by_el: IF (element_by_element) THEN
-            Call track(my_ring,x_coord_co_temp, i_ring_element, i_ring_element+1, default )
-         ENDIF find_CO_for_el_by_el
 
          iii_c_code=advance_node() ! c-code go to the next node
          current=>current%next     ! f90-code bring to the next mode
-      ENDDO element_number
+      ENDDO element_number 
 
       debug_print_2: if (ptc_track_debug) then
          Print *, 'elem_number_at_observ(i_obs)= ', elem_number_at_observ
