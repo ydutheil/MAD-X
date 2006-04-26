@@ -1793,7 +1793,7 @@ CONTAINS
       INTEGER, INTENT(IN)       :: i_current_elem
       CHARACTER(16), INTENT(IN) :: name_curr_elem !      current%MAG%    name
       ! TYPE:fibre   element Character(16)
-      LOGICAL(lp), INTENT(IN)   ::  Entry_not_exit
+      LOGICAL(lp), INTENT(IN)       ::  Entry_not_exit
       REAL(dp), INTENT(IN)      ::  sum_length, length_curr_elem
 
       Real (dp) :: B0_dipole, Quadr_k, TiltD_dipole, rad_curv_m, &
@@ -2511,7 +2511,7 @@ CONTAINS
       !k      integer j,jend,k,kp,kq,next_start,itype(23),switch,turns
       INTEGER ::  j_particle_line_counter,kq,kp
       INTEGER ::  next_start ! int. function
-      !k      real(kind(1d0)) phi,track(12),zstart(12),twopi,z(6,1000),zn(6),   &
+      !k      real(kind(1d0)) phi,track(12),zstart(12),twopi,z(6,1000),zn(6),  &
       !k     &ex,ey,et,orbit0(6),eigen(6,6),x,px,y,py,t,deltae,fx,phix,fy,phiy, &
       !k     &ft,phit,get_value,get_variable,zero,deltax,coords(6,0:turns,*)
       !real(kind(1d0)) :: twoPi, Ex_horz_emi_m, Ey_vert_emi_m, Et_long_emi_m
@@ -2861,7 +2861,7 @@ CONTAINS
     ! USE ptc_results
     implicit none
 
-    LOGICAL(lp),       INTENT(IN) :: ptc_track_debug
+    LOGICAL(lp),           INTENT(IN) :: ptc_track_debug
     INTEGER,           INTENT(IN) :: Normal_Order_n0   ! =1 for Linear
     REAL (dp),         INTENT(IN)  ::  x_coord_co(1:6) ! => x0(1:6) in ptc_track
     TYPE (real_8),     INTENT(OUT)  :: Map_Y(6)        !  y => Map_Y - local name
