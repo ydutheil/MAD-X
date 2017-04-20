@@ -1,4 +1,4 @@
-SUBROUTINE twiss(rt,disp0,tab_name,sector_tab_name)
+SUBROUTINE twiss(rt,disp0,tab_name,sector_tab_name,step)
   use twiss0fi
   use twissafi
   use twisslfi
@@ -14,7 +14,7 @@ SUBROUTINE twiss(rt,disp0,tab_name,sector_tab_name)
   !     Purpose:                                                         *
   !     TWISS command: Track linear lattice parameters.                  *
   !----------------------------------------------------------------------*
-  double precision :: rt(6,6), disp0(6), cp_thrd=1d-12 ! coupling limit
+  double precision :: rt(6,6), disp0(6), step, cp_thrd=1d-12 ! coupling limit
   integer :: tab_name(*)
   integer :: sector_tab_name(*) ! holds sectormap data
 
@@ -148,7 +148,7 @@ SUBROUTINE twiss(rt,disp0,tab_name,sector_tab_name)
   sigmat = s0mat
 
   !---- Build table of lattice functions, coupled.
-  call twcpgo(rt,orbit0)
+  call twcpgo(rt,orbit0, step)
   if(.not. flipping) then
      write (warnstr, '(a)') 'Modes flip is not possible for this lattice'
      call fort_warn('TWISS: ', warnstr)
@@ -1631,7 +1631,7 @@ SUBROUTINE twdisp_ini(rt,disp0)
 
 end SUBROUTINE twdisp_ini
 
-SUBROUTINE twcpgo(rt,orbit0)
+SUBROUTINE twcpgo(rt,orbit0,step)
   use twiss0fi
   use twisslfi
   use twisscfi
@@ -1653,10 +1653,10 @@ SUBROUTINE twcpgo(rt,orbit0)
   ! 2014-Jun-11  11:10:37  ghislain: added:                              *
   !     orbit0(6) (double)  initial orbit vector                         *
   !----------------------------------------------------------------------*
-  double precision :: rt(6,6), orbit0(6)
+  double precision :: rt(6,6), orbit0(6), step
 
   logical :: fmap, cplxy, cplxt, sector_sel, mycentre_cptk
-  integer :: i, iecnt, code, save, n_align, elpar_vl
+  integer :: i, iecnt, code, save, n_align, elpar_vl, nint
   double precision :: ek(6), re(6,6), rwi(6,6), rc(6,6), te(6,6,6)
   double precision :: orbit(6), orbit2(6)
   double precision :: bvk, sumloc, pos0, sd, el
@@ -1667,6 +1667,7 @@ SUBROUTINE twcpgo(rt,orbit0)
   character(len=130) :: msg
 
   integer, external :: el_par_vector, advance_node, restart_sequ, get_option, node_al_errors
+  integer, external :: interpolate_node, reset_interpolation
   double precision, external :: node_value, get_value
   double precision, parameter :: eps=1d-16
 
@@ -1723,14 +1724,47 @@ SUBROUTINE twcpgo(rt,orbit0)
   sigdx = zero
   sigdy = zero
 
-  !---- Loop over positions.
   iecnt = 0
   centre_cptk = .false.
   i = restart_sequ()
   i_spch = 0
 
-10 continue
+  if (step .gt. 0) then
+    call track_range_interpolate()
+  else
+    call track_range_flat()
+  endif
 
+  call compute_summary()
+
+contains
+
+subroutine track_range_interpolate
+  i = 1
+  do while (i .ne. 0)
+    el = node_value('l ')
+    nint = el / step
+    if (nint .gt. 1) then
+      i = interpolate_node(nint)
+      i = restart_sequ()
+      call track_range_flat()
+      i = reset_interpolation(nint)
+    else
+      call track_one_element()
+    endif
+    i = advance_node()
+  end do
+end subroutine track_range_interpolate
+
+subroutine track_range_flat
+   i = 1
+   do while (i .ne. 0)
+     call track_one_element()
+     i = advance_node()
+   end do
+end subroutine track_range_flat
+
+subroutine track_one_element
   sector_sel = node_value('sel_sector ') .ne. zero .and. sectormap
   code = node_value('mad8_type ')
 !  if (code .eq. code_tkicker)     code = code_kicker
@@ -1854,10 +1888,9 @@ SUBROUTINE twcpgo(rt,orbit0)
      opt_fun(31) = rmat(2,1)
      opt_fun(32) = rmat(2,2)
   endif
+end subroutine track_one_element
 
-  if (advance_node() .ne. 0) goto 10
-
-  !---- Compute summary.
+subroutine compute_summary
   wgt    = max(iecnt, 1)
   sigxco = sqrt(sigxco / wgt)
   sigyco = sqrt(sigyco / wgt)
@@ -1871,6 +1904,8 @@ SUBROUTINE twcpgo(rt,orbit0)
   if (cplxt .or. radiate) &
        call fort_warn('TWCPGO: ','TWISS uses the RF system or synchrotron radiation only '// &
                        'to find the closed orbit, for optical calculations it ignores both.')
+end subroutine compute_summary
+
 end SUBROUTINE twcpgo
 
 SUBROUTINE twcptk(re,orbit)

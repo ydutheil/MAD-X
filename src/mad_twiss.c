@@ -263,6 +263,7 @@ pro_embedded_twiss(struct command* current_global_twiss)
   double betx,bety,alfx,mux,alfy,muy,x,px,y,py,t,pt,dx,dpx,dy,dpy,wx,
     phix,dmux,wy,phiy,dmuy,ddx,ddpx,ddy,ddpy,
     r11,r12,r21,r22,s;
+  double zero = 0;
   int i, jt=0, lp, k_orb = 0, u_orb = 0, pos, k = 1;
   int w_file, beta_def, inval = 1, chrom_flg; // ks, err not used
   int keep_info;
@@ -561,7 +562,7 @@ pro_embedded_twiss(struct command* current_global_twiss)
       adjust_probe_fp(twiss_deltas->a[i]); /* sets correct gamma, beta, etc. */
 
       // CALL TWISS
-      twiss_(oneturnmat, disp0, tarr->i, dummy_arr->i); /* different call */
+      twiss_(oneturnmat, disp0, tarr->i, dummy_arr->i, &zero); /* different call */
 
       if ((twiss_success = get_option("twiss_success"))) {
         if (get_option("keeporbit"))
@@ -785,6 +786,7 @@ pro_twiss(void)
   char dummy[NAME_L] = "dummy", *sector_table_name = dummy; /* second string required by) */
   /* will be set to a proper string in case twiss_sector option selected */
   double tol,tol_keep, q1_val_p = 0, q2_val_p = 0, q1_val, q2_val, dq1, dq2;
+  double step, zero = 0;
   int i, j, lp, k_orb = 0, u_orb = 0, pos, k_save = 1, k = 1, k_sect, w_file, beta_def;
   int chrom_flg;
   int orbit_input = 0; // counter of number of elements of initial orbit given on command line
@@ -942,6 +944,15 @@ pro_twiss(void)
 
   if((pos = name_list_pos("notable", nl)) > -1 && nl->inform[pos]) k_save = 0;
 
+  step = command_par_value("step", current_twiss);
+  if (step && get_option("centre")) {
+    warning("step incompatible with centre", "step ignored");
+    step = 0;
+  }
+  if (step) {
+    k_save = 1;
+  }
+
   /*    end of command decoding  */
 
   if ((beta_def = twiss_input(current_twiss)) < 0) {
@@ -1036,7 +1047,7 @@ pro_twiss(void)
       // LD 2016.04.19
       adjust_probe_fp(twiss_deltas->a[i]+DQ_DELTAP);
       current_node = current_sequ->ex_start;
-      twiss_(oneturnmat, disp0, tarr->i, tarr_sector->i); // CALL TWISS
+      twiss_(oneturnmat, disp0, tarr->i, tarr_sector->i, &zero); // CALL TWISS
       if ((twiss_success = get_option("twiss_success")) == 0) break;
 
       pos = name_list_pos("q1", summ_table->columns);
@@ -1045,8 +1056,17 @@ pro_twiss(void)
       q2_val_p = summ_table->d_cols[pos][i];
     }
 
+
     if (k_save) {
-      twiss_table = make_table(table_name, "twiss", twiss_table_cols, twiss_table_types, current_sequ->n_nodes);
+      int table_length = current_sequ->n_nodes;
+      if (step) {
+        // FIXME: calculate table size exactly?
+        // NOTE: the following is an overapproximation, as for each individual
+        // element this formula applies as integer division (floor):
+        table_length += current_sequ->length / step;
+      }
+
+      twiss_table = make_table(table_name, "twiss", twiss_table_cols, twiss_table_types, table_length);
       twiss_table->dynamic = 1; /* flag for table row access to current row */
       add_to_table_list(twiss_table, table_register);
       current_sequ->tw_table = twiss_table;
@@ -1057,7 +1077,7 @@ pro_twiss(void)
     // LD 2016.04.19
     adjust_probe_fp(twiss_deltas->a[i]); /* sets correct gamma, beta, etc. */
     current_node = current_sequ->ex_start;
-    twiss_(oneturnmat, disp0, tarr->i, tarr_sector->i);
+    twiss_(oneturnmat, disp0, tarr->i, tarr_sector->i, &step);
     if ((twiss_success = get_option("twiss_success")) == 0) break;
     augment_count("summ ");
 

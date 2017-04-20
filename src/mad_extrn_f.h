@@ -269,7 +269,7 @@ void trrun_(F_INTEGER switch_, F_INTEGER turns, F_DOUBLE orbit0, F_DOUBLE rt, F_
 // from twiss.f90
 void tmrefe_(F_DOUBLE rf);
 void tmrefo_(F_INTEGER kobs, F_DOUBLE orbit0, F_DOUBLE orbit, F_DOUBLE rt);
-void twiss_(F_DOUBLE rt, F_DOUBLE disp0, F_INTEGER tab_name, F_INTEGER sector_tab_name);
+void twiss_(F_DOUBLE rt, F_DOUBLE disp0, F_INTEGER tab_name, F_INTEGER sector_tab_name, F_DOUBLE step);
 void twcpin_(F_DOUBLE rt, F_DOUBLE disp0, F_DOUBLE r0mat, F_INTEGER error);
 void twdisp_ini_(F_DOUBLE rt, F_DOUBLE disp0);
 
