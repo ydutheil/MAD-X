@@ -138,7 +138,7 @@
             ncon=ncon+1
             fvect(ncon)=f_val
             fsum=fsum+f_val**2
-            if(fprt) then ;
+            if(fprt) then
               select case(type)
                 case(1); write(*,880) name,weight,val,c_min,f_val**2
                 case(2); write(*,890) name,weight,val,c_max,f_val**2
