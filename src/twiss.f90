@@ -1659,6 +1659,9 @@ SUBROUTINE twcpgo(rt,orbit0,step)
   integer :: i, iecnt, code, save, n_align, elpar_vl, nint
   double precision :: ek(6), re(6,6), rwi(6,6), rc(6,6), te(6,6,6)
   double precision :: orbit00(6), ek00(6), re00(6,6), te00(6,6,6)
+  double precision :: rw0(6,6), rmat0(2,2)
+  double precision :: alfx0, betx0, amux0
+  double precision :: alfy0, bety0, amuy0
   double precision :: orbit(6), orbit2(6)
   double precision :: bvk, sumloc, pos0, sd, el
   double precision :: al_errors(align_max)
@@ -1724,7 +1727,6 @@ SUBROUTINE twcpgo(rt,orbit0,step)
   sigdy = zero
 
   iecnt = 0
-  centre_cptk = .false.
   i = restart_sequ()
   i_spch = 0
 
@@ -1796,9 +1798,20 @@ subroutine track_one_element
     ORBIT00 = ORBIT ; EK00 = EK ; RE00 = RE ; TE00 = TE
     call tmmap(code,.true.,.true.,orbit,fmap,ek,re,te,.true.,.false.,el/two)
 
+     betx0=betx; alfx0=alfx; amux0=amux
+     bety0=bety; alfy0=alfy; amuy0=amuy
+     RMAT0 = RMAT
+     if (rmatrix) RW0 = RW
+
     centre_cptk = .true.
     call twcptk(re,orbit0)
     centre_cptk = .false.
+
+     OPT_FUN(9:14) = ORBIT
+     betx=betx0; alfx=alfx0; amux=amux0
+     bety=bety0; alfy=alfy0; amuy=amuy0
+     RMAT = RMAT0
+     if (rmatrix) RW = RW0
 
      pos0 = currpos
      currpos = currpos + el/two
@@ -1929,13 +1942,13 @@ SUBROUTINE twcptk(re,orbit)
   double precision :: re(6,6), orbit(6)
 
   integer :: i, i1, i2, j, irank
-  double precision :: rw0(6,6), rwi(6,6), rc(6,6), dt(6)
+  double precision :: rwi(6,6), rc(6,6), dt(6)
   double precision :: a(2,2), b(2,2), c(2,2), d(2,2), ra(4,8)
   double precision :: rmat0(2,2), e(2,2), f(2,2), cd(2,2), tmp(2,2)
   double precision :: rmat_bar(2,2), ebar(2,2), fbar(2,2), hmat(2,2)
   double precision :: edet, fdet, tempa, tempb, det
-  double precision :: alfx0, betx0, amux0, alfx_ini, betx_ini, amux_ini
-  double precision :: alfy0, bety0, amuy0, alfy_ini, bety_ini, amuy_ini
+  double precision :: alfx_ini, betx_ini, amux_ini
+  double precision :: alfy_ini, bety_ini, amuy_ini
   character(len=name_len) :: name
   character(len=200)      :: warnstr
 
@@ -1950,8 +1963,8 @@ SUBROUTINE twcptk(re,orbit)
   integer, parameter :: izero = 0
   !---- Initialization
 
-  alfx0=zero; betx0=zero; amux0=zero; alfx_ini=zero; betx_ini=zero; amux_ini=zero
-  alfy0=zero; bety0=zero; amuy0=zero; alfy_ini=zero; bety_ini=zero; amuy_ini=zero
+  alfx_ini=zero; betx_ini=zero; amux_ini=zero
+  alfy_ini=zero; bety_ini=zero; amuy_ini=zero
   mode_flip_ele = mode_flip
   cp_error=.false.
   eflag = 0
@@ -1961,18 +1974,8 @@ SUBROUTINE twcptk(re,orbit)
   !---- Dispersion.
   DT = matmul(RE, DISP)
 
-  if (.not.centre .or. centre_cptk) OPT_FUN(15:18) = DT(1:4)
-
-  if (centre_cptk) then
-     alfx0 = alfx
-     alfy0 = alfy
-     betx0 = betx
-     bety0 = bety
-     amux0 = amux
-     amuy0 = amuy
-     RMAT0 = RMAT
-     if (rmatrix) RW0 = RW
-  else
+  if (.not.centre_bttk) OPT_FUN(15:18) = DT(1:4)
+  if (.not.centre_cptk) then
      DISP(1:4) = DT(1:4)
      disp(5) = zero
      disp(6) = one
@@ -2171,7 +2174,7 @@ SUBROUTINE twcptk(re,orbit)
      endif
   endif
 
-  if (.not.centre.or.centre_cptk) then
+  if (.not.centre_bttk) then
      opt_fun(3) = betx
      opt_fun(4) = alfx
      opt_fun(5) = amux
@@ -2199,18 +2202,6 @@ SUBROUTINE twcptk(re,orbit)
            opt_fun(33 + (i1-1)*6 + i2) = rc(i1,i2)
         enddo
      enddo
-  endif
-
-  if (centre_cptk) then
-     OPT_FUN(9:14) = ORBIT
-     alfx = alfx0
-     alfy = alfy0
-     betx = betx0
-     bety = bety0
-     amux = amux0
-     amuy = amuy0
-     RMAT = RMAT0
-     if (rmatrix) RW = RW0
   endif
 
 end SUBROUTINE twcptk
@@ -2502,7 +2493,7 @@ SUBROUTINE twcptk_sagan(re,orbit) ! new, RD matrix, talman, sagan
   double precision :: re(6,6), orbit(6)
 
   integer :: i, i1, i2, j, irank
-  double precision :: rw0(6,6), rwi(6,6), rc(6,6), dt(6)
+  double precision :: rwi(6,6), rc(6,6), dt(6)
   double precision :: a(2,2), b(2,2), c(2,2), d(2,2),ra(4,8)
   double precision :: rmat0(2,2), e(2,2), f(2,2), cd(2,2), tmp(2,2)
   double precision :: rmat_bar(2,2), ebar(2,2), fbar(2,2), dbar(2,2)
@@ -2525,18 +2516,8 @@ SUBROUTINE twcptk_sagan(re,orbit) ! new, RD matrix, talman, sagan
   call element_name(name,len(name))
   !---- Dispersion.
   DT = matmul(RE, DISP)
-  if (.not.centre .or. centre_cptk) OPT_FUN(15:18) = DT(1:4)
-
-  if (centre_cptk) then
-     alfx0 = alfx
-     alfy0 = alfy
-     betx0 = betx
-     bety0 = bety
-     amux0 = amux
-     amuy0 = amuy
-     RMAT0 = RMAT
-     if (rmatrix) RW0 = RW
-  else
+  if (.not.centre_bttk) OPT_FUN(15:18) = DT(1:4)
+  if (.not.centre_cptk) then
      DISP(1:4) = DT(1:4)
      disp(5) = zero
      disp(6) = one
@@ -2715,7 +2696,7 @@ SUBROUTINE twcptk_sagan(re,orbit) ! new, RD matrix, talman, sagan
      endif
   endif
 
-  if (.not.centre.or.centre_cptk) then
+  if (.not.centre_bttk) then
      opt_fun(3) = betx
      opt_fun(4) = alfx
      opt_fun(5) = amux
@@ -2735,18 +2716,6 @@ SUBROUTINE twcptk_sagan(re,orbit) ! new, RD matrix, talman, sagan
            opt_fun(33 + (i1-1)*6 + i2) = rc(i1,i2)
         enddo
      enddo
-  endif
-
-  if (centre_cptk) then
-     OPT_FUN(9:14) = ORBIT
-     alfx = alfx0
-     alfy = alfy0
-     betx = betx0
-     bety = bety0
-     amux = amux0
-     amuy = amuy0
-     RMAT = RMAT0
-     if (rmatrix) RW = RW0
   endif
 
 end SUBROUTINE twcptk_sagan
@@ -3160,7 +3129,7 @@ SUBROUTINE twbttk(re,te)
        + (fre(3,3)*frep(3,4) - fre(3,4)*frep(3,3)) / bety
 
   !---- Fill optics function array
-  if (.not.centre .or. centre_bttk) then
+  if (.not.centre_cptk) then
      opt_fun(19) = wx
      opt_fun(20) = phix
      opt_fun(21) = dmux
