@@ -1663,7 +1663,7 @@ SUBROUTINE twcpgo(rt,orbit0,step)
   double precision :: alfx0, betx0, amux0
   double precision :: alfy0, bety0, amuy0
   double precision :: orbit(6), orbit2(6)
-  double precision :: bvk, sumloc, pos0, sd, el
+  double precision :: bvk, sumloc, pos0, sd, el, currpos
   double precision :: al_errors(align_max)
   ! character(len=name_len) el_name
   character(len=130) :: msg
@@ -2850,7 +2850,7 @@ SUBROUTINE twchgo
   integer :: i, code, save, n_align
   double precision :: orbit(6), orbit2(6), ek(6), re(6,6), te(6,6,6)
   double precision :: orbit00(6), ek00(6), re00(6,6), te00(6,6,6)
-  double precision :: al_errors(align_max), el, pos0
+  double precision :: al_errors(align_max), el, pos0, currpos
   character(len=130) :: msg
 
   integer, external :: restart_sequ, advance_node, get_option, node_al_errors
@@ -3267,7 +3267,7 @@ SUBROUTINE tw_summ(rt,tt)
 
   !---- Initialization transverse
   !---  fix length problem - HG 14.4.08 ! ghislain : ???
-  suml    = currpos  ! ???
+  suml    = opt_fun(2)  ! ???
   betx    = opt_fun0(3)
   alfx    = opt_fun0(4)
 
