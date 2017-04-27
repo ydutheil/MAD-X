@@ -941,8 +941,7 @@ aper_header(struct table* aper_t, struct aper_node *lim)
   /* 2013-Nov-18  13:49:45  ghislain: changed n1min and at_element strings to uppercase in output to TFS */
   table_add_header(aper_t, "@ N1MIN            %%le   %g", lim->n1);
   set_value("beam","n1min",&lim->n1);
-
-  aper_t->header->p[aper_t->header->curr++] = tmpbuff(c_dum->c);
+  table_add_header(aper_t, "@ AT_ELEMENT       %%%02ds  \"%s\"", strlen(name), stoupper(name));
 }
 
 static void
