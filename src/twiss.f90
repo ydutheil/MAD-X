@@ -3570,12 +3570,14 @@ SUBROUTINE tmbend(ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
      endif
 
    !---- Get map for exit fringe fields and concatenate
+   if (exit_eff) then
      if (.not.kill_exi_fringe) then
         if (fintx .lt. 0) fintx = fint
         corr = (h + h) * hgap * fintx
         call tmfrng(.true.,h,sk1,e2,h2,-one,corr,rw,tw)
         call tmcat1(.true.,ek0,rw,tw,ek,re,te,ek,re,te)
      endif
+   endif
 
      !---- Apply tilt.
      if (tilt .ne. zero) then
