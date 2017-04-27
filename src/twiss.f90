@@ -1806,7 +1806,7 @@ subroutine track_one_element
 
     call twcptk(re,orbit)
 
-    call save_optical_functions(disp00)
+    call save_opt_fun()
     call twprep(save,1,opt_fun,currpos+el/two)
 
     ! restore optical functions
@@ -1850,14 +1850,14 @@ subroutine track_one_element
   sigdx  = sigdx  + disp(1)**2
   sigdy  = sigdy  + disp(3)**2
 
-  call save_optical_functions(disp)
+  call save_opt_fun()
   if (.not. centre) then
      call twprep(save,1,opt_fun,currpos)
   endif
 
 end subroutine track_one_element
 
-subroutine save_optical_functions(disp0)
+subroutine save_opt_fun(disp0)
     double precision :: disp0(6)
     integer :: i1, i2
 
@@ -1897,7 +1897,7 @@ subroutine save_optical_functions(disp0)
   eta = - sd * beta**2 / circ
   alfa = one / gamma**2 + eta
   opt_fun(74) = alfa
-end subroutine save_optical_functions
+end subroutine save_opt_fun
 
 subroutine compute_summary
   wgt    = max(iecnt, 1)
