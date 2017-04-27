@@ -1804,7 +1804,7 @@ subroutine track_one_element
      if (rmatrix) RW0 = RW
 
     centre_cptk = .true.
-    call twcptk(re,orbit0)
+    call twcptk(re,orbit)
     centre_cptk = .false.
 
      OPT_FUN(9:14) = ORBIT
@@ -3488,7 +3488,7 @@ SUBROUTINE tmbend(ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
   integer :: elpar_vl
   integer :: nd, n_ferr, code
   double precision :: f_errors(0:maxferr)
-  double precision :: rw(6,6), tw(6,6,6), ek0(6), orbit0(6)
+  double precision :: rw(6,6), tw(6,6,6), ek0(6)
   double precision :: x, y
   double precision :: an, sk1, sk2, sks, tilt, e1, e2, h, h1, h2, hgap, fint, fintx, rhoinv, blen, bvk
   double precision :: dh, corr, ct, st, hx, hy, rfac, pt
@@ -4357,7 +4357,6 @@ SUBROUTINE tmoct(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
   logical :: cplxy
   integer :: i, n_ferr, elpar_vl
   double precision :: f_errors(0:maxferr)
-  double precision :: orbit0(6), orbit00(6), ek00(6), re00(6,6), te00(6,6,6)
   double precision :: rw(6,6), tw(6,6,6)
   double precision :: sk3, sk3l, sk3s, octr, octi, posr, posi, cr, ci
   double precision :: rfac, pt, bvk, tilt4
