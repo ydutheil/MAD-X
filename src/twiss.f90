@@ -1812,7 +1812,7 @@ subroutine track_one_element
     ! restore optical functions
     betx=betx0; alfx=alfx0; amux=amux0
     bety=bety0; alfy=alfy0; amuy=amuy0
-    RMAT = RMAT0
+    RMAT = RMAT0 ; disp = disp00
     if (rmatrix) RW = RW0
     ORBIT = ORBIT00 ; EK = EK00 ; RE = RE00 ; TE = TE00
   endif
@@ -1857,8 +1857,7 @@ subroutine track_one_element
 
 end subroutine track_one_element
 
-subroutine save_opt_fun(disp0)
-    double precision :: disp0(6)
+subroutine save_opt_fun()
     integer :: i1, i2
 
   !--- save maxima and name of elements where they occur
@@ -1889,9 +1888,6 @@ subroutine save_opt_fun(disp0)
            opt_fun(74 + (i1-1)*6 + i2) = sigmat(i1,i2)
         enddo
      enddo
-
-     ! `cenre` option resets DISP before the last calculation (correct?!)
-     disp = disp0
 
   sd = rt(5,6) + dot_product(RT(5,1:4),DISP(1:4))
   eta = - sd * beta**2 / circ
