@@ -37,7 +37,6 @@ sdds_get_parm(SDDS_TABLE *SDDS_table, struct table *tfs_table)
   char    **parvalstr;
 
   int     h_length;
-  char    s_dum[1000];
 
   char    **cpar;
 
@@ -57,27 +56,27 @@ sdds_get_parm(SDDS_TABLE *SDDS_table, struct table *tfs_table)
          if(pardef->type == SDDS_LONG) {
            parvall = (long *)parval;
            if (get_option("debug")) printf("Parameter: %s, value: %ld\n",cpar[i2],*parvall);
-           table_add_header(aper_t, "@ %-16s %%ld  %ld", cpar[i2],*parvall);
+           table_add_header(tfs_table, "@ %-16s %%ld  %ld", cpar[i2],*parvall);
          }
          if(pardef->type == SDDS_SHORT) {
            parvals = (short *)parval;
            if (get_option("debug")) printf("Parameter: %s, value: %ld\n",cpar[i2],(long)*parvals);
-           table_add_header(aper_t, "@ %-16s %%ld  %ld", cpar[i2],(long)*parvals);
+           table_add_header(tfs_table, "@ %-16s %%ld  %ld", cpar[i2],(long)*parvals);
          }
          if(pardef->type == SDDS_FLOAT) {
            parvalf = (float *)parval;
            if (get_option("debug")) printf("Parameter: %s, value: %e\n",cpar[i2],(double)*parvalf);
-           table_add_header(aper_t, "@ %-16s %%e  %e", cpar[i2],(double)*parvalf);
+           table_add_header(tfs_table, "@ %-16s %%e  %e", cpar[i2],(double)*parvalf);
          }
          if(pardef->type == SDDS_DOUBLE) {
            parvald = (double *)parval;
            if (get_option("debug")) printf("Parameter: %s, value: %e\n",cpar[i2],*parvald);
-           table_add_header(aper_t, "@ %-16s %%le  %le", cpar[i2],*parvald);
+           table_add_header(tfs_table, "@ %-16s %%le  %le", cpar[i2],*parvald);
          }
          if(pardef->type == SDDS_STRING) {
            parvalstr = SDDS_GetParameter(SDDS_table,cpar[i2],NULL);
            if (get_option("debug")) printf("Parameter: %s, value: %s \n",cpar[i2],*parvalstr);
-           table_add_header(aper_t, "@ %-16s %%%02ds \"%s\"", cpar[i2],strlen(*parvalstr),*parvalstr);
+           table_add_header(tfs_table, "@ %-16s %%%02ds \"%s\"", cpar[i2],strlen(*parvalstr),*parvalstr);
          }
 
       }
