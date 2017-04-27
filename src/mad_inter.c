@@ -137,17 +137,17 @@ reset_interpolation(int *nint)
   current_node              = backup.current_node;
 
   if (backup.bend_flag) {
-    if (*nint >= 0) {
+    if (*nint >= 1) {
         curr = backup.first_node;
         delete_command(curr->p_elem->def);
         delete_element(curr->p_elem);
     }
-    if (*nint >= 1) {
+    if (*nint >= 2) {
       curr = backup.first_node->next;
       delete_command(curr->p_elem->def);
       delete_element(curr->p_elem);
     }
-    if (*nint >= 2) {
+    if (*nint >= 3) {
       curr = backup.last_node;
       delete_command(curr->p_elem->def);
       delete_element(curr->p_elem);
