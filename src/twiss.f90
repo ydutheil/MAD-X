@@ -1974,7 +1974,7 @@ SUBROUTINE twcptk(re,orbit)
   !---- Dispersion.
   DT = matmul(RE, DISP)
 
-  if (.not.centre_bttk) OPT_FUN(15:18) = DT(1:4)
+  if (.not.centre .or. centre_cptk) OPT_FUN(15:18) = DT(1:4)
   if (.not.centre_cptk) then
      DISP(1:4) = DT(1:4)
      disp(5) = zero
@@ -2174,7 +2174,7 @@ SUBROUTINE twcptk(re,orbit)
      endif
   endif
 
-  if (.not.centre_bttk) then
+  if (.not.centre.or.centre_cptk) then
      opt_fun(3) = betx
      opt_fun(4) = alfx
      opt_fun(5) = amux
@@ -2516,7 +2516,7 @@ SUBROUTINE twcptk_sagan(re,orbit) ! new, RD matrix, talman, sagan
   call element_name(name,len(name))
   !---- Dispersion.
   DT = matmul(RE, DISP)
-  if (.not.centre_bttk) OPT_FUN(15:18) = DT(1:4)
+  if (.not.centre .or. centre_cptk) OPT_FUN(15:18) = DT(1:4)
   if (.not.centre_cptk) then
      DISP(1:4) = DT(1:4)
      disp(5) = zero
@@ -2696,7 +2696,7 @@ SUBROUTINE twcptk_sagan(re,orbit) ! new, RD matrix, talman, sagan
      endif
   endif
 
-  if (.not.centre_bttk) then
+  if (.not.centre.or.centre_cptk) then
      opt_fun(3) = betx
      opt_fun(4) = alfx
      opt_fun(5) = amux
@@ -3129,7 +3129,7 @@ SUBROUTINE twbttk(re,te)
        + (fre(3,3)*frep(3,4) - fre(3,4)*frep(3,3)) / bety
 
   !---- Fill optics function array
-  if (.not.centre_cptk) then
+  if (.not.centre .or. centre_bttk) then
      opt_fun(19) = wx
      opt_fun(20) = phix
      opt_fun(21) = dmux
