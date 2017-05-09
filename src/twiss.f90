@@ -4408,7 +4408,7 @@ SUBROUTINE tmoct(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
   endif
 
   !---- Concatenate with drift map.
-  call tmdrf0(fsec,ftrk,orbit,fmap,dl,ek,re,te)
+  call tmdrf(fsec,ftrk,orbit,fmap,dl,ek,re,te)
   call tmcat(fsec,re,te,rw,tw,re,te)
   if (.not. exit_eff) return
 
@@ -5699,33 +5699,6 @@ SUBROUTINE tmyrot(ftrk,orbit,fmap,ek,re,te)
 end SUBROUTINE tmyrot
 
 SUBROUTINE tmdrf(fsec,ftrk,orbit,fmap,dl,ek,re,te)
-  use twisslfi
-  use math_constfi, only : two
-  implicit none
-  !----------------------------------------------------------------------*
-  !     Purpose:                                                         *
-  !     TRANSPORT map for drift space, with centre option.               *
-  !     Input:                                                           *
-  !     fsec      (logical) if true, return second order terms.          *
-  !     ftrk      (logical) if true, track orbit.                        *
-  !     Input/output:                                                    *
-  !     orbit(6)  (double)  closed orbit.                                *
-  !     Output:                                                          *
-  !     fmap      (logical) if true, element has a map.                  *
-  !     dl        (double)  element length.                              *
-  !     ek(6)     (double)  kick due to element.                         *
-  !     re(6,6)   (double)  transfer matrix.                             *
-  !     te(6,6,6) (double)  second-order terms.                          *
-  !----------------------------------------------------------------------*
-  logical :: fsec, ftrk, fmap
-  double precision :: dl
-  double precision :: orbit(6), ek(6), re(6,6), te(6,6,6)
-
-  call tmdrf0(fsec,ftrk,orbit,fmap,dl,ek,re,te)
-
-end SUBROUTINE tmdrf
-
-SUBROUTINE tmdrf0(fsec,ftrk,orbit,fmap,dl,ek,re,te)
   use twissbeamfi, only : beta, gamma, dtbyds
   use matrices, only : EYE
   use math_constfi, only : zero, two, three
@@ -5776,7 +5749,7 @@ SUBROUTINE tmdrf0(fsec,ftrk,orbit,fmap,dl,ek,re,te)
   !---- Track orbit.
   if (ftrk) call tmtrak(ek,re,te,orbit,orbit)
 
-end SUBROUTINE tmdrf0
+end SUBROUTINE tmdrf
 
 SUBROUTINE tmrf(fsec,ftrk,exit_eff,orbit,fmap,el,ds,ek,re,te)
   use twisslfi
@@ -5869,10 +5842,10 @@ SUBROUTINE tmrf(fsec,ftrk,exit_eff,orbit,fmap,el,ds,ek,re,te)
   if (el .ne. zero) then
     ! TODO: generalize for ds!=0.5
     dl = el / two
-    call tmdrf0(fsec,ftrk,orbit,fmap,dl,ek0,rw,tw)
+    call tmdrf(fsec,ftrk,orbit,fmap,dl,ek0,rw,tw)
     call tmcat(fsec,re,te,rw,tw,re,te)
     if (.not. exit_eff) return
-    call tmdrf0(fsec,ftrk,orbit,fmap,dl,ek0,rw,tw)
+    call tmdrf(fsec,ftrk,orbit,fmap,dl,ek0,rw,tw)
     call tmcat(fsec,rw,tw,re,te,re,te)
   endif
 
