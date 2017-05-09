@@ -11,5 +11,8 @@
 int interpolate_node(int *nint);
 int reset_interpolation(void);
 
+int start_interp_node(double* step);
+int advance_interp_node(void);
+
 #endif // MAD_INTER_H
 

@@ -1659,7 +1659,7 @@ SUBROUTINE twcpgo(rt,orbit0,step)
   integer :: i, iecnt, code, save, n_align, elpar_vl, nint
   double precision :: ek(6), re(6,6), rwi(6,6), rc(6,6), te(6,6,6)
   double precision :: orbit00(6), ek00(6), re00(6,6), te00(6,6,6), disp00(6)
-  double precision :: rw0(6,6), rmat0(2,2)
+  double precision :: rw0(6,6), rmat0(2,2), pos0
   double precision :: alfx0, betx0, amux0
   double precision :: alfy0, bety0, amuy0
   double precision :: orbit(6), orbit2(6)
@@ -1669,7 +1669,7 @@ SUBROUTINE twcpgo(rt,orbit0,step)
   character(len=130) :: msg
 
   integer, external :: el_par_vector, advance_node, restart_sequ, get_option, node_al_errors
-  integer, external :: interpolate_node, reset_interpolation
+  integer, external :: start_interp_node, advance_interp_node
   double precision, external :: node_value, get_value
   double precision, parameter :: eps=1d-16
 
@@ -1729,42 +1729,29 @@ SUBROUTINE twcpgo(rt,orbit0,step)
   i = restart_sequ()
   i_spch = 0
 
-  if (step .gt. 0) then
-    call track_range_interpolate()
-  else
-    call track_range_flat()
-  endif
+  i = 1
+  do while (i .ne. 0)
+    if (start_interp_node(step) .ne. 0) then
+      call backup_optics()
+      do while (i .ne. 0)
+        call track_one_element(.true.)
+        i = advance_interp_node()
+      end do
+      call restore_optics()
+      call track_one_element(.false.)
+    else
+      call track_one_element(.not. centre)
+    endif
+    i = advance_node()
+  end do
 
   call compute_summary()
 
 contains
 
-subroutine track_range_interpolate
-  i = 1
-  do while (i .ne. 0)
-    el = node_value('l ')
-    nint = el / step
-    if (nint .gt. 1) then
-      i = interpolate_node(nint)
-      i = restart_sequ()
-      call track_range_flat()
-      i = reset_interpolation()
-    else
-      call track_one_element()
-    endif
-    i = advance_node()
-  end do
-end subroutine track_range_interpolate
+subroutine track_one_element(fexit)
+  logical :: fexit
 
-subroutine track_range_flat
-   i = 1
-   do while (i .ne. 0)
-     call track_one_element()
-     i = advance_node()
-   end do
-end subroutine track_range_flat
-
-subroutine track_one_element
   sector_sel = node_value('sel_sector ') .ne. zero .and. sectormap
   code = node_value('mad8_type ')
 !  if (code .eq. code_tkicker)     code = code_kicker
@@ -1844,7 +1831,7 @@ subroutine track_one_element
   sigdy  = sigdy  + disp(3)**2
 
   call save_opt_fun()
-  if (.not. centre) then
+  if (fexit) then
      call twprep(save,1,opt_fun,currpos)
   endif
 
@@ -1852,6 +1839,7 @@ end subroutine track_one_element
 
 subroutine backup_optics()
   ORBIT00 = ORBIT ; EK00 = EK ; RE00 = RE ; TE00 = TE
+  pos0=currpos
   betx0=betx; alfx0=alfx; amux0=amux
   bety0=bety; alfy0=alfy; amuy0=amuy
   RMAT0 = RMAT ; disp00 = disp
@@ -1860,6 +1848,7 @@ end subroutine backup_optics
 
 subroutine restore_optics()
   ORBIT = ORBIT00 ; EK = EK00 ; RE = RE00 ; TE = TE00
+  currpos = pos0
   betx=betx0; alfx=alfx0; amux=amux0
   bety=bety0; alfy=alfy0; amuy=amuy0
   RMAT = RMAT0 ; disp = disp00

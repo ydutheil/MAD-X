@@ -173,3 +173,26 @@ reset_interpolation(void)
   return 0;
 }
 
+int
+start_interp_node(double* step)
+{
+  if (*step == 0)
+    return 0;
+  double l = node_value("l ");
+  int nint = l / *step;
+  if (nint < 2)
+    return 0;
+  interpolate_node(&nint);
+  restart_sequ();
+  return nint;
+}
+
+int
+advance_interp_node()
+{
+  if (advance_node() == 0) {
+    reset_interpolation();
+    return 0;
+  }
+  return 1;
+}
