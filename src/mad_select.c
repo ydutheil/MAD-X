@@ -39,7 +39,7 @@ start_iter_select(struct command* cmd, struct sequence_list* sequs, struct seque
 }
 
 struct node*
-fetch_node_select(struct select_iter* it)
+fetch_node_select(struct select_iter* it, struct sequence** seq)
 {
   struct node* nodes[2];
 
@@ -67,8 +67,10 @@ fetch_node_select(struct select_iter* it)
       continue;
     }
 
-    if (!it->node || pass_select(it->node->p_elem->name, it->cmd))
+    if (!it->node || pass_select(it->node->p_elem->name, it->cmd)) {
+      if (seq) *seq = it->sequ;
       return it->node;
+    }
   }
 }
 

@@ -30,7 +30,7 @@ void  set_range(char* range, struct sequence*);
 void  set_sector(void);
 
 struct select_iter* start_iter_select(struct command*, struct sequence_list*, struct sequence* sequ);
-struct node*        fetch_node_select(struct select_iter*);
+struct node*        fetch_node_select(struct select_iter*, struct sequence**);
 
 #endif // MAD_SELECT_H
 
