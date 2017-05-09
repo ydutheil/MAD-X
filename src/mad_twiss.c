@@ -850,6 +850,11 @@ pro_twiss(void)
     warning("step incompatible with centre", "step ignored");
     step = 0;
   }
+  if (step && get_option("chrom")) {
+    // it's possible to implement, but please fuse twchgo and twcpgo first...
+    warning("step not implemented for chrom", "step ignored");
+    step = 0;
+  }
   if (step) {
     k_save = 1;
   }
