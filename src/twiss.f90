@@ -2842,7 +2842,6 @@ SUBROUTINE twchgo
 
   !---- Loop over positions.
   i = restart_sequ()
-  if (centre) currpos = zero
   i_spch=0
 
 10 continue
@@ -2872,8 +2871,6 @@ SUBROUTINE twchgo
      call tmmap(code,.true.,.true.,orbit,fmap,ek,re,te,.true.,.false.,el/two)
      ! TG: same comment as in twchgo (inconsistent center behaviour) applies here:
      if (fmap) call twbttk(re,te)
-     pos0 = currpos
-     currpos = currpos + el/two
 
      call save_opt_fun()
      call twprep(save,2,opt_fun,zero)
@@ -2903,9 +2900,6 @@ SUBROUTINE twchgo
   if (.not.centre) then
      call twprep(save,2,opt_fun,zero)
   else
-     currpos = pos0 + el
-
-     opt_fun(2) = currpos
      opt_fun(3) = betx
      opt_fun(4) = alfx
      opt_fun(5) = amux
