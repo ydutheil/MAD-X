@@ -1732,8 +1732,8 @@ SUBROUTINE twcpgo(rt,orbit0,step)
   i = 1
   do while (i .ne. 0)
     el = node_value('l ')
-    if (start_interp_node(step, el) .ne. 0) then
-      do while (fetch_interp_node(dl) .ne. 0)
+    if (start_interp_node(i) .ne. 0) then
+      do while (fetch_interp_node(i, dl) .ne. 0)
         call backup_optics()
         call track_one_element(dl, .true.)
         call restore_optics()

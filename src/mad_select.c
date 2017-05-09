@@ -1,5 +1,77 @@
 #include "madx.h"
 
+struct select_iter
+{
+  int i_seq, full;
+  struct command* cmd;
+  struct sequence* sequ;
+  struct sequence_list* sequs;
+  const char* range;
+  struct node *node, *range_end;
+};
+
+struct select_iter*
+start_iter_select(struct command* cmd, struct sequence_list* sequs, struct sequence* sequ)
+{
+  const char* name;
+
+  if (!sequs)
+    sequs = sequences;
+
+  if (!sequ && (name = command_par_string("sequence", cmd))) {
+    sequ = find_sequence(name, sequs);
+    if (!sequ) {
+      warning("unknown sequence, skipped select: ", name);
+      return NULL;
+    }
+  }
+
+  struct select_iter* it = mycalloc("start_iter_select", 1, sizeof(struct select_iter));
+  it->cmd = cmd;
+  it->sequ = sequ ? sequ : sequs->sequs[0];
+  it->full = log_val("full", cmd);
+
+  // `full` has two meanings: all elements in sequence + all sequences
+  it->sequs = it->full ? sequs : NULL;
+  it->range = it->full ? NULL : command_par_string("range", cmd);
+
+  return it;
+}
+
+struct node*
+fetch_node_select(struct select_iter* it)
+{
+  struct node* nodes[2];
+
+  // stop iteration immediately
+  if (!it)
+    return NULL;
+
+  for (;;) {
+    if (it->node) {
+      it->node = it->node == it->range_end ? NULL : it->node->next;
+    }
+    else if (it->range) {
+      if (get_ex_range(it->range, it->sequ, nodes)) {
+        it->node = nodes[0];
+        it->range_end = nodes[1];
+      }
+    }
+    else {
+      it->node = it->sequ->ex_start;
+      it->range_end = it->sequ->ex_end;
+    }
+
+    if (!it->node && it->full && it->i_seq != it->sequs->curr) {
+      it->sequ = it->sequs->sequs[++it->i_seq];
+      continue;
+    }
+
+    if (!it->node || pass_select(it->node->p_elem->name, it->cmd))
+      return it->node;
+  }
+}
+
 static int
 get_select_ex_ranges(struct sequence* sequ, struct command_list* select, struct node_list* s_ranges)
   /* makes a list of nodes of an expanded sequence that pass the range
@@ -222,7 +294,7 @@ set_sector(void)
 }
 
 int
-get_ex_range(char* range, struct sequence* sequ, struct node** nodes)
+get_ex_range(const char* range, struct sequence* sequ, struct node** nodes)
   /* returns start and end node (nodes[0] and nodes[1])
      of a range in the full expanded sequence */
 // LD: Same function as get_table_range
@@ -402,6 +474,10 @@ store_deselect(struct in_cmd* cmd)
   else if (strcmp(flag_name, "sectormap") == 0)
   {
   }
+  else if (strcmp(flag_name, "interpolate") == 0)
+  {
+    select_interp(cmd->clone);
+  }
   else /* store deselect for all tables */
   {
     if ((dscl = find_command_list(flag_name, table_deselect)) == NULL)
@@ -547,6 +623,10 @@ store_select(struct in_cmd* cmd)
       sector_select->commands[sector_select->curr++] = cmd->clone;
       cmd->clone_flag = 1; /* do not drop */
     }
+  }
+  else if (strcmp(flag_name, "interpolate") == 0)
+  {
+    select_interp(cmd->clone);
   }
   else /* store select for all tables */
   {

@@ -1,6 +1,8 @@
 #ifndef MAD_INTER_H
 #define MAD_INTER_H
 
+struct command;
+
 // interface
 
 /* Warning:
@@ -11,8 +13,10 @@
 int interpolate_node(int *nint);
 int reset_interpolation(void);
 
-int start_interp_node(double* step, double* el);
-int fetch_interp_node(double* dl);
+int start_interp_node(int* i);
+int fetch_interp_node(int* i, double* dl);
+
+void select_interp(struct command*);
 
 #endif // MAD_INTER_H
 
