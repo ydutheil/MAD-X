@@ -1,4 +1,4 @@
-SUBROUTINE twiss(rt,disp0,tab_name,sector_tab_name,step)
+SUBROUTINE twiss(rt,disp0,tab_name,sector_tab_name)
   use twiss0fi
   use twissafi
   use twisslfi
@@ -14,7 +14,7 @@ SUBROUTINE twiss(rt,disp0,tab_name,sector_tab_name,step)
   !     Purpose:                                                         *
   !     TWISS command: Track linear lattice parameters.                  *
   !----------------------------------------------------------------------*
-  double precision :: rt(6,6), disp0(6), step, cp_thrd=1d-12 ! coupling limit
+  double precision :: rt(6,6), disp0(6), cp_thrd=1d-12 ! coupling limit
   integer :: tab_name(*)
   integer :: sector_tab_name(*) ! holds sectormap data
 
@@ -148,7 +148,7 @@ SUBROUTINE twiss(rt,disp0,tab_name,sector_tab_name,step)
   sigmat = s0mat
 
   !---- Build table of lattice functions, coupled.
-  call twcpgo(rt,orbit0, step)
+  call twcpgo(rt,orbit0)
   if(.not. flipping) then
      write (warnstr, '(a)') 'Modes flip is not possible for this lattice'
      call fort_warn('TWISS: ', warnstr)
@@ -1631,7 +1631,7 @@ SUBROUTINE twdisp_ini(rt,disp0)
 
 end SUBROUTINE twdisp_ini
 
-SUBROUTINE twcpgo(rt,orbit0,step)
+SUBROUTINE twcpgo(rt,orbit0)
   use twiss0fi
   use twisslfi
   use twisscfi
@@ -1653,10 +1653,10 @@ SUBROUTINE twcpgo(rt,orbit0,step)
   ! 2014-Jun-11  11:10:37  ghislain: added:                              *
   !     orbit0(6) (double)  initial orbit vector                         *
   !----------------------------------------------------------------------*
-  double precision :: rt(6,6), orbit0(6), step
+  double precision :: rt(6,6), orbit0(6)
 
   logical :: fmap, cplxy, cplxt, sector_sel
-  integer :: i, iecnt, code, save, n_align, elpar_vl, nint
+  integer :: i, iecnt, code, save, n_align, elpar_vl
   double precision :: ek(6), re(6,6), rwi(6,6), rc(6,6), te(6,6,6)
   double precision :: orbit00(6), ek00(6), re00(6,6), te00(6,6,6), disp00(6)
   double precision :: rw0(6,6), rmat0(2,2), pos0
@@ -1725,6 +1725,7 @@ SUBROUTINE twcpgo(rt,orbit0,step)
   sigdx = zero
   sigdy = zero
 
+  !---- Loop over positions.
   iecnt = 0
   i = restart_sequ()
   i_spch = 0

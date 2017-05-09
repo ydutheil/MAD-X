@@ -2564,7 +2564,6 @@ const char *const_command_def =
 "keeporbit= [s, default, default], "
 "tolerance= [r, 1.e-6], "
 "deltap   = [s, none], "
-"step     = [r, 0], "
 "notable  = [l, false, true]; "
 " "
 "match: match match 1 0 "
