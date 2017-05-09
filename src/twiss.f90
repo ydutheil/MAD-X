@@ -1748,7 +1748,7 @@ subroutine track_range_interpolate
       i = interpolate_node(nint)
       i = restart_sequ()
       call track_range_flat()
-      i = reset_interpolation(nint)
+      i = reset_interpolation()
     else
       call track_one_element()
     endif
