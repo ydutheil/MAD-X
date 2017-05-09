@@ -1663,13 +1663,13 @@ SUBROUTINE twcpgo(rt,orbit0,step)
   double precision :: alfx0, betx0, amux0
   double precision :: alfy0, bety0, amuy0
   double precision :: orbit(6), orbit2(6)
-  double precision :: bvk, sumloc, sd, el, currpos
+  double precision :: bvk, sumloc, sd, el, dl, currpos
   double precision :: al_errors(align_max)
   ! character(len=name_len) el_name
   character(len=130) :: msg
 
   integer, external :: el_par_vector, advance_node, restart_sequ, get_option, node_al_errors
-  integer, external :: start_interp_node, advance_interp_node
+  integer, external :: start_interp_node, fetch_interp_node
   double precision, external :: node_value, get_value
   double precision, parameter :: eps=1d-16
 
@@ -1731,16 +1731,16 @@ SUBROUTINE twcpgo(rt,orbit0,step)
 
   i = 1
   do while (i .ne. 0)
-    if (start_interp_node(step) .ne. 0) then
-      call backup_optics()
-      do while (i .ne. 0)
-        call track_one_element(.true.)
-        i = advance_interp_node()
+    el = node_value('l ')
+    if (start_interp_node(step, el) .ne. 0) then
+      do while (fetch_interp_node(dl) .ne. 0)
+        call backup_optics()
+        call track_one_element(dl, .true.)
+        call restore_optics()
       end do
-      call restore_optics()
-      call track_one_element(.false.)
+      call track_one_element(el, .false.)
     else
-      call track_one_element(.not. centre)
+      call track_one_element(el, .not. centre)
     endif
     i = advance_node()
   end do
@@ -1749,7 +1749,8 @@ SUBROUTINE twcpgo(rt,orbit0,step)
 
 contains
 
-subroutine track_one_element(fexit)
+subroutine track_one_element(el, fexit)
+  double precision, intent(in) :: el
   logical :: fexit
 
   sector_sel = node_value('sel_sector ') .ne. zero .and. sectormap
@@ -1758,7 +1759,6 @@ subroutine track_one_element(fexit)
   if (code .eq. code_placeholder) code = code_instrument
   bvk = node_value('other_bv ')
   elpar_vl = el_par_vector(g_polarity, g_elpar)
-  el = node_value('l ')
   ele_body = .false.
   if ( el .gt. eps) ele_body = .true.
 
@@ -3452,6 +3452,12 @@ SUBROUTINE tmbend(ftrk,fcentre,orbit,fmap,el,dl,ek,re,te)
      fintx = g_elpar(b_fintx)
      sks = g_elpar(b_k1s)
      h = an / el
+
+     !---  calculate body slice from start (no exit fringe field):
+     if (dl .lt. el .and. .not. fcentre) then
+       el = dl
+       kill_exi_fringe = .true.
+     endif
 
      !---- Apply field errors and change coefficients using DELTAP.
      F_ERRORS = zero

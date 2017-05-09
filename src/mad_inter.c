@@ -173,26 +173,31 @@ reset_interpolation(void)
   return 0;
 }
 
+
+// interpolation without creating intermediate nodes:
+static struct {
+  double dl;
+  int i, nint;
+} fast_interp;
+
+
 int
-start_interp_node(double* step)
+start_interp_node(double* step, double* el)
 {
   if (*step == 0)
     return 0;
-  double l = node_value("l ");
-  int nint = l / *step;
+  int nint = *el / *step;
   if (nint < 2)
     return 0;
-  interpolate_node(&nint);
-  restart_sequ();
+  fast_interp.dl = *el / nint;
+  fast_interp.i = 0;
+  fast_interp.nint = nint;
   return nint;
 }
 
 int
-advance_interp_node()
+fetch_interp_node(double* dl)
 {
-  if (advance_node() == 0) {
-    reset_interpolation();
-    return 0;
-  }
-  return 1;
+  *dl = ++fast_interp.i * fast_interp.dl;
+  return fast_interp.i <= fast_interp.nint;
 }
