@@ -779,7 +779,7 @@ SUBROUTINE tmfrst(orbit0,orbit,fsec,ftrk,rt,tt,eflag,kobs,save,thr_on)
   endif
 
   !---- Element matrix
-  call tmmap(code,fsec,ftrk,orbit,fmap,ek,re,te,.true.,.true.,el)
+  call tmmap(code,fsec,ftrk,orbit,fmap,ek,re,te,.false.,el)
 
   !--- if element has a map, concatenate
   if (fmap) then
@@ -1796,7 +1796,7 @@ subroutine track_one_element
   if (centre) then
     call backup_optics()
 
-    call tmmap(code,.true.,.true.,orbit,fmap,ek,re,te,.true.,.false.,el/two)
+    call tmmap(code,.true.,.true.,orbit,fmap,ek,re,te,.true.,el/two)
 
     ! TG: the `fmap` condition is only an approximation of the previous
     ! behaviour of the `centre` option - which was handled inconsistently
@@ -1811,7 +1811,7 @@ subroutine track_one_element
   endif
 
   ! now do exact calculation with full length:
-  call tmmap(code,.true.,.true.,orbit,fmap,ek,re,te,.true.,.true.,el)
+  call tmmap(code,.true.,.true.,orbit,fmap,ek,re,te,.false.,el)
 
   if (fmap) then
      call twcptk(re,orbit)
@@ -2869,7 +2869,7 @@ SUBROUTINE twchgo
   if (centre) then
      call backup_optics()
 
-     call tmmap(code,.true.,.true.,orbit,fmap,ek,re,te,.true.,.false.,el/two)
+     call tmmap(code,.true.,.true.,orbit,fmap,ek,re,te,.true.,el/two)
      ! TG: same comment as in twchgo (inconsistent center behaviour) applies here:
      if (fmap) call twbttk(re,te)
 
@@ -2879,7 +2879,7 @@ SUBROUTINE twchgo
      call restore_optics()
   endif
 
-  call tmmap(code,.true.,.true.,orbit,fmap,ek,re,te,.true.,.true.,el)
+  call tmmap(code,.true.,.true.,orbit,fmap,ek,re,te,.false.,el)
 
   if (fmap) then
       call tw_synch_int()
@@ -3257,7 +3257,7 @@ SUBROUTINE tw_summ(rt,tt)
 end SUBROUTINE tw_summ
 
 
-SUBROUTINE tmmap(code,fsec,ftrk,orbit,fmap,ek,re,te,entry_eff,exit_eff,dl)
+SUBROUTINE tmmap(code,fsec,ftrk,orbit,fmap,ek,re,te,fcentre,dl)
   use twtrrfi
   use name_lenfi
   use time_varfi
@@ -3273,8 +3273,7 @@ SUBROUTINE tmmap(code,fsec,ftrk,orbit,fmap,ek,re,te,entry_eff,exit_eff,dl)
   !     code                element type code                            *
   !     fsec      (logical) if true, return second order terms.          *
   !     ftrk      (logical) if true, track orbit.                        *
-  !     entry_eff (logical) entry effects.                               *
-  !     exit_eff  (logical) exit effects.                                *
+  !     fcentre   (logical) legacy centre behaviour (no exit effects).   *
   !     dl        (double)  slice length.                                *
   !     input/output:                                                    *
   !     orbit(6)  (double)  closed orbit.                                *
@@ -3287,7 +3286,7 @@ SUBROUTINE tmmap(code,fsec,ftrk,orbit,fmap,ek,re,te,entry_eff,exit_eff,dl)
   !     te(6,6,6) (double)  second-order terms.                          *
   !----------------------------------------------------------------------*
   integer :: code
-  logical :: fsec, ftrk, fmap, entry_eff, exit_eff
+  logical :: fsec, ftrk, fmap, fcentre
   double precision :: dl
   double precision :: orbit(6), ek(6), re(6,6), te(6,6,6)
 
@@ -3313,19 +3312,19 @@ SUBROUTINE tmmap(code,fsec,ftrk,orbit,fmap,ek,re,te,entry_eff,exit_eff,dl)
         call tmdrf(fsec,ftrk,orbit,fmap,dl,ek,re,te)
 
      case (code_rbend, code_sbend)
-        call tmbend(ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
+        call tmbend(ftrk,fcentre,orbit,fmap,el,dl,ek,re,te)
 
      case (code_matrix)
         call tmarb(fsec,ftrk,orbit,fmap,ek,re,te)
 
      case (code_quadrupole)
-        call tmquad(fsec,ftrk,exit_eff,plot_tilt,orbit,fmap,el,dl,ek,re,te)
+        call tmquad(fsec,ftrk,fcentre,plot_tilt,orbit,fmap,el,dl,ek,re,te)
 
      case (code_sextupole)
-        call tmsext(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
+        call tmsext(fsec,ftrk,fcentre,orbit,fmap,el,dl,ek,re,te)
 
      case (code_octupole)
-        call tmoct(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
+        call tmoct(fsec,ftrk,fcentre,orbit,fmap,el,dl,ek,re,te)
 
      case (code_multipole)
         call tmmult(fsec,ftrk,orbit,fmap,re,te)
@@ -3334,10 +3333,10 @@ SUBROUTINE tmmap(code,fsec,ftrk,orbit,fmap,ek,re,te,entry_eff,exit_eff,dl)
         call tmsol(fsec,ftrk,orbit,fmap,dl,ek,re,te)
 
      case (code_rfcavity)
-        call tmrf(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
+        call tmrf(fsec,ftrk,fcentre,orbit,fmap,el,dl,ek,re,te)
 
      case (code_elseparator)
-        call tmsep(fsec,ftrk,exit_eff,orbit,fmap,dl,ek,re,te)
+        call tmsep(fsec,ftrk,fcentre,orbit,fmap,dl,ek,re,te)
 
      case (code_srotation)
         call tmsrot(ftrk,orbit,fmap,ek,re,te)
@@ -3346,7 +3345,7 @@ SUBROUTINE tmmap(code,fsec,ftrk,orbit,fmap,ek,re,te,entry_eff,exit_eff,dl)
         call tmyrot(ftrk,orbit,fmap,ek,re,te)
 
      case (code_hkicker, code_vkicker, code_kicker, code_tkicker)
-        call tmcorr(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
+        call tmcorr(fsec,ftrk,fcentre,orbit,fmap,el,dl,ek,re,te)
 
      case (code_beambeam)
         !---- (Particles/bunch taken for the opposite beam).
@@ -3386,7 +3385,7 @@ SUBROUTINE tmmap(code,fsec,ftrk,orbit,fmap,ek,re,te,entry_eff,exit_eff,dl)
 
 end SUBROUTINE tmmap
 
-SUBROUTINE tmbend(ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
+SUBROUTINE tmbend(ftrk,fcentre,orbit,fmap,el,dl,ek,re,te)
   use twtrrfi
   use twisslfi
   use twiss_elpfi
@@ -3400,7 +3399,7 @@ SUBROUTINE tmbend(ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
   !     TRANSPORT map for sector bending magnets                         *
   !     Input:                                                           *
   !     ftrk      (logical) if true, track orbit.                        *
-  !     exit_eff  (logical) exit effects.                                *
+  !     fcentre   (logical) legacy centre behaviour (no exit effects).   *
   !     el        (double)  element length.                              *
   !     dl        (double)  slice length.                                *
   !     Input/output:                                                    *
@@ -3411,7 +3410,7 @@ SUBROUTINE tmbend(ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
   !     re(6,6)   (double)  transfer matrix.                             *
   !     te(6,6,6) (double)  second-order terms.                          *
   !----------------------------------------------------------------------*
-  logical :: ftrk, fmap, exit_eff
+  logical :: ftrk, fmap, fcentre
   double precision :: orbit(6), ek(6), re(6,6), te(6,6,6), el, dl
 
   logical :: cplxy
@@ -3501,7 +3500,7 @@ SUBROUTINE tmbend(ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
      endif
 
    !---- Get map for exit fringe fields and concatenate
-   if (exit_eff) then
+   if (.not. fcentre) then
      if (.not.kill_exi_fringe) then
         if (fintx .lt. 0) fintx = fint
         corr = (h + h) * hgap * fintx
@@ -3519,7 +3518,7 @@ SUBROUTINE tmbend(ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
      !---- Track orbit.
      if (ftrk) then
         call tmtrak(ek,re,te,orbit,orbit)
-        if (.not. exit_eff) return
+        if (fcentre) return
 
         !---- Half radiation effects at exit.
         if (ftrk .and. radiate) then
@@ -3929,7 +3928,7 @@ SUBROUTINE tmtilt(fsec,tilt,ek,r,t)
 
 end SUBROUTINE tmtilt
 
-SUBROUTINE tmcorr(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
+SUBROUTINE tmcorr(fsec,ftrk,fcentre,orbit,fmap,el,dl,ek,re,te)
   use twtrrfi
   use math_constfi, only : zero, one, three, half
   use twissbeamfi, only : radiate, deltap, gamma, arad
@@ -3941,7 +3940,7 @@ SUBROUTINE tmcorr(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
   !     Input:                                                           *
   !     fsec      (logical) if true, return second order terms.          *
   !     ftrk      (logical) if true, track orbit.                        *
-  !     exit_eff  (logical) exit effects.                                *
+  !     fcentre   (logical) legacy centre behaviour (no exit effects).   *
   !     el        (double)  element length.                              *
   !     Input/output:                                                    *
   !     orbit(6)  (double)  closed orbit.                                *
@@ -3951,7 +3950,7 @@ SUBROUTINE tmcorr(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
   !     re(6,6)   (double)  transfer matrix.                             *
   !     te(6,6,6) (double)  second-order terms.                          *
   !----------------------------------------------------------------------*
-  logical, intent(IN) :: fsec, ftrk, exit_eff
+  logical, intent(IN) :: fsec, ftrk, fcentre
   logical, intent(OUT) :: fmap
   double precision, intent(IN OUT) :: orbit(6), el, dl
   double precision, intent(OUT) :: ek(6), re(6,6), te(6,6,6)
@@ -4032,7 +4031,7 @@ SUBROUTINE tmcorr(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
      !---- Drift to end.
      if (el .ne. zero) then
        call tmdrf(fsec,ftrk,orbit,fmap,dl,ek,re,te)
-       if (.not. exit_eff) return
+       if (fcentre) return
      endif
 
      !---- Half radiation effects at exit.
@@ -4260,7 +4259,7 @@ SUBROUTINE tmmult(fsec,ftrk,orbit,fmap,re,te)
 
 end SUBROUTINE tmmult
 
-SUBROUTINE tmoct(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
+SUBROUTINE tmoct(fsec,ftrk,fcentre,orbit,fmap,el,dl,ek,re,te)
   use twtrrfi
   use twisslfi
   use twiss_elpfi
@@ -4274,7 +4273,7 @@ SUBROUTINE tmoct(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
   !     Input:                                                           *
   !     fsec      (logical) if true, return second order terms.          *
   !     ftrk      (logical) if true, track orbit.                        *
-  !     exit_eff  (logical) exit effects.                                *
+  !     fcentre   (logical) legacy centre behaviour (no exit effects).   *
   !     Input/output:                                                    *
   !     orbit(6)  (double)  closed orbit.                                *
   !     Remark: the orbit is NOT rotated before and after this routine   *
@@ -4285,7 +4284,7 @@ SUBROUTINE tmoct(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
   !     re(6,6)   (double)  transfer matrix.                             *
   !     te(6,6,6) (double)  second-order terms.                          *
   !----------------------------------------------------------------------*
-  logical, intent(IN) :: fsec, ftrk, exit_eff
+  logical, intent(IN) :: fsec, ftrk, fcentre
   logical, intent(OUT) :: fmap
   double precision, intent(IN) :: el, dl
   double precision, intent(IN OUT) :: orbit(6)
@@ -4388,7 +4387,7 @@ SUBROUTINE tmoct(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
   !---- Concatenate with drift map.
   call tmdrf(fsec,ftrk,orbit,fmap,dl,ek,re,te)
   call tmcat(fsec,re,te,rw,tw,re,te)
-  if (.not. exit_eff) return
+  if (fcentre) return
 
   !---- Half kick at exit.
   posr = orbit(1) * (orbit(1)**2 - three*orbit(3)**2) / six
@@ -4839,7 +4838,7 @@ SUBROUTINE tmarb(fsec,ftrk,orbit,fmap,ek,re,te)
 
 end SUBROUTINE tmarb
 
-SUBROUTINE tmquad(fsec,ftrk,exit_eff,plot_tilt,orbit,fmap,el,dl,ek,re,te)
+SUBROUTINE tmquad(fsec,ftrk,fcentre,plot_tilt,orbit,fmap,el,dl,ek,re,te)
   use twtrrfi
   use twisslfi
   use twiss_elpfi
@@ -4852,7 +4851,7 @@ SUBROUTINE tmquad(fsec,ftrk,exit_eff,plot_tilt,orbit,fmap,el,dl,ek,re,te)
   !     Input:                                                           *
   !     fsec      (logical) if true, return second order terms.          *
   !     ftrk      (logical) if true, track orbit.                        *
-  !     exit_eff  (logical) exit effects.                                *
+  !     fcentre   (logical) legacy centre behaviour (no exit effects).   *
   !     plot_tilt (double)  external tilt needed for plot                *
   !     el        (double)  element length.                              *
   !     dl        (double)  slice length.                                *
@@ -4866,7 +4865,7 @@ SUBROUTINE tmquad(fsec,ftrk,exit_eff,plot_tilt,orbit,fmap,el,dl,ek,re,te)
   !     re(6,6)   (double)  transfer matrix.                             *
   !     te(6,6,6) (double)  second-order terms.                          *
   !----------------------------------------------------------------------*
-  logical :: fsec, ftrk, fmap, exit_eff
+  logical :: fsec, ftrk, fmap, fcentre
   double precision :: plot_tilt, el, dl
   double precision :: orbit(6), ek(6), re(6,6), te(6,6,6)
 
@@ -4928,7 +4927,7 @@ SUBROUTINE tmquad(fsec,ftrk,exit_eff,plot_tilt,orbit,fmap,el,dl,ek,re,te)
   endif
 
   call qdbody(fsec,ftrk,tilt,sk1,orbit,dl,ek,re,te)
-  if (.not. exit_eff) return
+  if (fcentre) return
 
   !---- Half radiation effect at exit.
   if (radiate .and. ftrk) then
@@ -5052,7 +5051,7 @@ SUBROUTINE qdbody(fsec,ftrk,tilt,sk1,orbit,el,ek,re,te)
 
 end SUBROUTINE qdbody
 
-SUBROUTINE tmsep(fsec,ftrk,exit_eff,orbit,fmap,dl,ek,re,te)
+SUBROUTINE tmsep(fsec,ftrk,fcentre,orbit,fmap,dl,ek,re,te)
   use twisslfi
   use twiss_elpfi
   use twissbeamfi, only : deltap, pc, charge
@@ -5064,7 +5063,7 @@ SUBROUTINE tmsep(fsec,ftrk,exit_eff,orbit,fmap,dl,ek,re,te)
   !     Input:                                                           *
   !     fsec      (logical) if true, return second order terms.          *
   !     ftrk      (logical) if true, track orbit.                        *
-  !     exit_eff  (logical) exit effects.                                *
+  !     fcentre   (logical) legacy centre behaviour (no exit effects).   *
   !     dl        (double)  slice length.                                *
   !     Input/output:                                                    *
   !     orbit(6)  (double)  closed orbit.                                *
@@ -5076,7 +5075,7 @@ SUBROUTINE tmsep(fsec,ftrk,exit_eff,orbit,fmap,dl,ek,re,te)
   !     re(6,6)   (double)  transfer matrix.                             *
   !     te(6,6,6) (double)  second-order terms.                          *
   !----------------------------------------------------------------------*
-  logical :: fsec, ftrk, fmap, exit_eff
+  logical :: fsec, ftrk, fmap, fcentre
   double precision :: dl
   double precision :: orbit(6), ek(6), re(6,6), te(6,6,6)
 
@@ -5133,7 +5132,7 @@ SUBROUTINE tmsep(fsec,ftrk,exit_eff,orbit,fmap,dl,ek,re,te)
   ekick  = efield * ten3m * charge / (pc * (one + deltap))
 
   call spbody(fsec,ftrk,tilt,ekick,orbit,dl,ek,re,te)
-  if (.not. exit_eff) return
+  if (fcentre) return
 
   if (tilt .ne. zero)  then
      !---  rotate orbit at exit
@@ -5247,7 +5246,7 @@ SUBROUTINE spbody(fsec,ftrk,tilt,ekick,orbit,el,ek,re,te)
 
 end SUBROUTINE spbody
 
-SUBROUTINE tmsext(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
+SUBROUTINE tmsext(fsec,ftrk,fcentre,orbit,fmap,el,dl,ek,re,te)
   use twtrrfi
   use twisslfi
   use twiss_elpfi
@@ -5260,7 +5259,7 @@ SUBROUTINE tmsext(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
   !     Input:                                                           *
   !     fsec      (logical) if true, return second order terms.          *
   !     ftrk      (logical) if true, track orbit.                        *
-  !     exit_eff  (logical) exit effects.                                *
+  !     fcentre   (logical) legacy centre behaviour (no exit effects).   *
   !     el        (double)  element length.                              *
   !     dl        (double)  slice length.                                *
   !     Input/output:                                                    *
@@ -5273,7 +5272,7 @@ SUBROUTINE tmsext(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
   !     re(6,6)   (double)  transfer matrix.                             *
   !     te(6,6,6) (double)  second-order terms.                          *
   !----------------------------------------------------------------------*
-  logical :: fsec, ftrk, fmap, exit_eff
+  logical :: fsec, ftrk, fmap, fcentre
   double precision :: el, dl
   double precision :: orbit(6), ek(6), re(6,6), te(6,6,6)
 
@@ -5333,7 +5332,7 @@ SUBROUTINE tmsext(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
   endif
 
   call sxbody(fsec,ftrk,tilt,sk2,orbit,dl,ek,re,te)
-  if (.not. exit_eff) return
+  if (fcentre) return
 
   !---- Half radiation effects at exit.
   if (ftrk) then
@@ -5729,7 +5728,7 @@ SUBROUTINE tmdrf(fsec,ftrk,orbit,fmap,dl,ek,re,te)
 
 end SUBROUTINE tmdrf
 
-SUBROUTINE tmrf(fsec,ftrk,exit_eff,orbit,fmap,el,ds,ek,re,te)
+SUBROUTINE tmrf(fsec,ftrk,fcentre,orbit,fmap,el,ds,ek,re,te)
   use twisslfi
   use twiss_elpfi
   use twissbeamfi, only : deltap, pc
@@ -5743,7 +5742,7 @@ SUBROUTINE tmrf(fsec,ftrk,exit_eff,orbit,fmap,el,ds,ek,re,te)
   !     Input:                                                           *
   !     fsec      (logical) if true, return second order terms.          *
   !     ftrk      (logical) if true, track orbit.                        *
-  !     exit_eff  (logical) exit effects.                                *
+  !     fcentre   (logical) legacy centre behaviour (no exit effects).   *
   !     el        (double)  element length.                              *
   !     ds        (double)  slice length.                                *
   !     Input/output:                                                    *
@@ -5754,7 +5753,7 @@ SUBROUTINE tmrf(fsec,ftrk,exit_eff,orbit,fmap,el,ds,ek,re,te)
   !     re(6,6)   (double)  transfer matrix.                             *
   !     te(6,6,6) (double)  second-order terms.                          *
   !----------------------------------------------------------------------*
-  logical :: fsec, ftrk, fmap, exit_eff
+  logical :: fsec, ftrk, fmap, fcentre
   double precision :: el, ds
   double precision :: orbit(6), ek(6), re(6,6), te(6,6,6)
 
@@ -5822,7 +5821,7 @@ SUBROUTINE tmrf(fsec,ftrk,exit_eff,orbit,fmap,el,ds,ek,re,te)
     dl = el / two
     call tmdrf(fsec,ftrk,orbit,fmap,dl,ek0,rw,tw)
     call tmcat(fsec,re,te,rw,tw,re,te)
-    if (.not. exit_eff) return
+    if (fcentre) return
     call tmdrf(fsec,ftrk,orbit,fmap,dl,ek0,rw,tw)
     call tmcat(fsec,rw,tw,re,te,re,te)
   endif
