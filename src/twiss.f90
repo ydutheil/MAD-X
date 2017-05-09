@@ -1759,8 +1759,7 @@ subroutine track_one_element(el, fexit)
   if (code .eq. code_placeholder) code = code_instrument
   bvk = node_value('other_bv ')
   elpar_vl = el_par_vector(g_polarity, g_elpar)
-  ele_body = .false.
-  if ( el .gt. eps) ele_body = .true.
+  ele_body = el .gt. eps
 
   !--- 2013-Nov-14  10:34:00  ghislain: add acquisition of name of element here.
   !call element_name(el_name,len(el_name))
@@ -1774,7 +1773,7 @@ subroutine track_one_element(el, fexit)
   if (n_align .ne. 0)  then
      !print*, "coupl1: Element = ", el_name
      ele_body = .false.
-     ORBIT2 = ORBIT
+     orbit2 = orbit
      call tmali1(orbit2,al_errors,beta,gamma,orbit,re)
      call twcptk(re,orbit)
      if (sectormap) SRMAT = matmul(RE,SRMAT)
@@ -1809,7 +1808,7 @@ subroutine track_one_element(el, fexit)
   if (n_align .ne. 0)  then
      !print*, "coupl2: Element = ", el_name
      ele_body = .false.
-     ORBIT2 = ORBIT
+     orbit2 = orbit
      call tmali2(el,orbit2,al_errors,beta,gamma,orbit,re)
      call twcptk(re,orbit)
      if (sectormap) SRMAT = matmul(RE,SRMAT)
@@ -1838,25 +1837,25 @@ subroutine track_one_element(el, fexit)
 end subroutine track_one_element
 
 subroutine backup_optics()
-  ORBIT00 = ORBIT ; EK00 = EK ; RE00 = RE ; TE00 = TE
+  orbit00 = orbit ; ek00 = ek ; re00 = re ; te00 = te
   pos0=currpos
   betx0=betx; alfx0=alfx; amux0=amux
   bety0=bety; alfy0=alfy; amuy0=amuy
-  RMAT0 = RMAT ; disp00 = disp
-  if (rmatrix) RW0 = RW
+  rmat0 = rmat ; disp00 = disp
+  if (rmatrix) rw0 = rw
 end subroutine backup_optics
 
 subroutine restore_optics()
-  ORBIT = ORBIT00 ; EK = EK00 ; RE = RE00 ; TE = TE00
+  orbit = orbit00 ; ek = ek00 ; re = re00 ; te = te00
   currpos = pos0
   betx=betx0; alfx=alfx0; amux=amux0
   bety=bety0; alfy=alfy0; amuy=amuy0
-  RMAT = RMAT0 ; disp = disp00
-  if (rmatrix) RW = RW0
+  rmat = rmat0 ; disp = disp00
+  if (rmatrix) rw = rw0
 end subroutine restore_optics
 
 subroutine save_opt_fun()
-    integer :: i1, i2
+  integer :: i1, i2
 
   !--- save maxima and name of elements where they occur
   bxmax  = max(bxmax,  betx)
@@ -1866,26 +1865,26 @@ subroutine save_opt_fun()
   xcomax = max(xcomax, abs(orbit(1)))
   ycomax = max(ycomax, abs(orbit(3)))
 
-     opt_fun(3) = betx
-     opt_fun(4) = alfx
-     opt_fun(5) = amux
-     opt_fun(6) = bety
-     opt_fun(7) = alfy
-     opt_fun(8) = amuy
-     OPT_FUN(9:14) = ORBIT
-     OPT_FUN(15:18) = disp(1:4)
+  opt_fun(3) = betx
+  opt_fun(4) = alfx
+  opt_fun(5) = amux
+  opt_fun(6) = bety
+  opt_fun(7) = alfy
+  opt_fun(8) = amuy
+  opt_fun(9:14) = ORBIT
+  opt_fun(15:18) = disp(1:4)
 
-     opt_fun(29) = rmat(1,1)
-     opt_fun(30) = rmat(1,2)
-     opt_fun(31) = rmat(2,1)
-     opt_fun(32) = rmat(2,2)
+  opt_fun(29) = rmat(1,1)
+  opt_fun(30) = rmat(1,2)
+  opt_fun(31) = rmat(2,1)
+  opt_fun(32) = rmat(2,2)
 
-     ! !IT sigma matrix(1:6, 1:6) = opt_fun(75:110)
-     do i1=1,6
-        do i2=1,6
-           opt_fun(74 + (i1-1)*6 + i2) = sigmat(i1,i2)
-        enddo
+  ! !IT sigma matrix(1:6, 1:6) = opt_fun(75:110)
+  do i1=1,6
+     do i2=1,6
+        opt_fun(74 + (i1-1)*6 + i2) = sigmat(i1,i2)
      enddo
+  enddo
 
   sd = rt(5,6) + dot_product(RT(5,1:4),DISP(1:4))
   eta = - sd * beta**2 / circ
@@ -2158,9 +2157,9 @@ SUBROUTINE twcptk(re,orbit)
      endif
   endif
 
-     DISP(1:4) = DT(1:4)
-     disp(5) = zero
-     disp(6) = one
+  DISP(1:4) = DT(1:4)
+  disp(5) = zero
+  disp(6) = one
 
   if (rmatrix) then
      do i1=1,6
@@ -3423,112 +3422,110 @@ SUBROUTINE tmbend(ftrk,fcentre,orbit,fmap,el,dl,ek,re,te)
 
   code = node_value('mad8_type ')
   kill_ent_fringe = node_value('kill_ent_fringe ') .ne. 0d0
-  kill_exi_fringe = node_value('kill_exi_fringe ') .ne. 0d0
+  kill_exi_fringe = node_value('kill_exi_fringe ') .ne. 0d0 .or. fcentre
 
   !---- Test for non-zero length.
   fmap = el .ne. zero
+  if (.not. fmap) return
 
-  if (fmap) then
-     !-- get element parameters
-     elpar_vl = el_par_vector(b_k3s, g_elpar)
-     bvk = node_value('other_bv ')
-     an = bvk * g_elpar(b_angle)
-     tilt = g_elpar(b_tilt)
-     e1 = g_elpar(b_e1)
-     e2 = g_elpar(b_e2)
+  !-- get element parameters
+  elpar_vl = el_par_vector(b_k3s, g_elpar)
+  bvk = node_value('other_bv ')
+  an = bvk * g_elpar(b_angle)
+  tilt = g_elpar(b_tilt)
+  e1 = g_elpar(b_e1)
+  e2 = g_elpar(b_e2)
 
-     if (code .eq. code_rbend) then
-        e1 = e1 + an / two
-        e2 = e2 + an / two
-     endif
+  if (code .eq. code_rbend) then
+    e1 = e1 + an / two
+    e2 = e2 + an / two
+  endif
 
-     !---  bvk also applied further down
-     sk1 = g_elpar(b_k1)
-     sk2 = g_elpar(b_k2)
-     h1 = g_elpar(b_h1)
-     h2 = g_elpar(b_h2)
-     hgap = g_elpar(b_hgap)
-     fint = g_elpar(b_fint)
-     fintx = g_elpar(b_fintx)
-     sks = g_elpar(b_k1s)
-     h = an / el
+  !---  bvk also applied further down
+  sk1 = g_elpar(b_k1)
+  sk2 = g_elpar(b_k2)
+  h1 = g_elpar(b_h1)
+  h2 = g_elpar(b_h2)
+  hgap = g_elpar(b_hgap)
+  fint = g_elpar(b_fint)
+  fintx = g_elpar(b_fintx)
+  sks = g_elpar(b_k1s)
+  h = an / el
 
-     !---  calculate body slice from start (no exit fringe field):
-     if (dl .lt. el .and. .not. fcentre) then
-       el = dl
-       kill_exi_fringe = .true.
-     endif
+  !---  calculate body slice from start (no exit fringe field):
+  if (dl .lt. el .and. .not. fcentre) then
+    el = dl
+    kill_exi_fringe = .true.
+  endif
 
-     !---- Apply field errors and change coefficients using DELTAP.
-     F_ERRORS = zero
-     n_ferr = node_fd_errors(f_errors)
-     dh = (- h * deltap + bvk * f_errors(0) / el) / (one + deltap) ! dipole term
-     sk1 = bvk * (sk1 + f_errors(2) / el) / (one + deltap) ! quad term
-     sk2 = bvk * (sk2 + f_errors(4) / el) / (one + deltap) ! sext term
-     sks = bvk * (sks + f_errors(3) / el) / (one + deltap) ! skew quad term
+  !---- Apply field errors and change coefficients using DELTAP.
+  F_ERRORS = zero
+  n_ferr = node_fd_errors(f_errors)
+  dh = (- h * deltap + bvk * f_errors(0) / el) / (one + deltap) ! dipole term
+  sk1 = bvk * (sk1 + f_errors(2) / el) / (one + deltap) ! quad term
+  sk2 = bvk * (sk2 + f_errors(4) / el) / (one + deltap) ! sext term
+  sks = bvk * (sks + f_errors(3) / el) / (one + deltap) ! skew quad term
 
-     !---- Half radiation effects at entrance.
-     if (ftrk .and. radiate) then
-        ct = cos(tilt)
-        st = sin(tilt)
-        x =   orbit(1) * ct + orbit(3) * st
-        y = - orbit(1) * st + orbit(3) * ct
-        hx = h + dh + sk1*(x - h*y**2/two) + sks*y + sk2*(x**2 - y**2)/two
-        hy = sks * x - sk1*y - sk2*x*y
-        rfac = (arad * gamma**3 * el / three) * &
-             (hx**2 + hy**2) * (one + h*x) * (one - tan(e1)*x)
-        pt = orbit(6)
-        orbit(2) = orbit(2) - rfac * (one + pt) * orbit(2)
-        orbit(4) = orbit(4) - rfac * (one + pt) * orbit(4)
-        orbit(6) = orbit(6) - rfac * (one + pt) ** 2
-     endif
+  !---- Half radiation effects at entrance.
+  if (ftrk .and. radiate) then
+    ct = cos(tilt)
+    st = sin(tilt)
+    x =   orbit(1) * ct + orbit(3) * st
+    y = - orbit(1) * st + orbit(3) * ct
+    hx = h + dh + sk1*(x - h*y**2/two) + sks*y + sk2*(x**2 - y**2)/two
+    hy = sks * x - sk1*y - sk2*x*y
+    rfac = (arad * gamma**3 * el / three) * &
+         (hx**2 + hy**2) * (one + h*x) * (one - tan(e1)*x)
+    pt = orbit(6)
+    orbit(2) = orbit(2) - rfac * (one + pt) * orbit(2)
+    orbit(4) = orbit(4) - rfac * (one + pt) * orbit(4)
+    orbit(6) = orbit(6) - rfac * (one + pt) ** 2
+  endif
 
-     !---- Body of the dipole.
-     !---- Get map for body section
-     call tmsect(.true.,dl,h,dh,sk1,sk2,ek,re,te)
+  !---- Body of the dipole.
+  !---- Get map for body section
+  call tmsect(.true.,dl,h,dh,sk1,sk2,ek,re,te)
 
-     !---- Get map for entrance fringe field and concatenate
-     if (.not.kill_ent_fringe) then
-        corr = (h + h) * hgap * fint
-        call tmfrng(.true.,h,sk1,e1,h1,one,corr,rw,tw)
-        call tmcat1(.true.,ek,re,te,ek0,rw,tw,ek,re,te)
-     endif
+  !---- Get map for entrance fringe field and concatenate
+  if (.not.kill_ent_fringe) then
+    corr = (h + h) * hgap * fint
+    call tmfrng(.true.,h,sk1,e1,h1,one,corr,rw,tw)
+    call tmcat1(.true.,ek,re,te,ek0,rw,tw,ek,re,te)
+  endif
 
-   !---- Get map for exit fringe fields and concatenate
-   if (.not. fcentre) then
-     if (.not.kill_exi_fringe) then
-        if (fintx .lt. 0) fintx = fint
-        corr = (h + h) * hgap * fintx
-        call tmfrng(.true.,h,sk1,e2,h2,-one,corr,rw,tw)
-        call tmcat1(.true.,ek0,rw,tw,ek,re,te,ek,re,te)
-     endif
-   endif
+  !--- Get map for exit fringe fields and concatenate
+  if (.not.kill_exi_fringe) then
+    if (fintx .lt. 0) fintx = fint
+    corr = (h + h) * hgap * fintx
+    call tmfrng(.true.,h,sk1,e2,h2,-one,corr,rw,tw)
+    call tmcat1(.true.,ek0,rw,tw,ek,re,te,ek,re,te)
+  endif
 
-     !---- Apply tilt.
-     if (tilt .ne. zero) then
-        call tmtilt(.true.,tilt,ek,re,te)
-        cplxy = .true.
-     endif
+  !---- Apply tilt.
+  if (tilt .ne. zero) then
+    call tmtilt(.true.,tilt,ek,re,te)
+    cplxy = .true.
+  endif
 
-     !---- Track orbit.
-     if (ftrk) then
-        call tmtrak(ek,re,te,orbit,orbit)
-        if (fcentre) return
+  !---- Track orbit.
+  if (ftrk) then
+    call tmtrak(ek,re,te,orbit,orbit)
+  endif
 
-        !---- Half radiation effects at exit.
-        if (ftrk .and. radiate) then
-           x =   orbit(1) * ct + orbit(3) * st
-           y = - orbit(1) * st + orbit(3) * ct
-           hx = h + dh + sk1*(x - h*y**2/two) + sks*y + sk2*(x**2 - y**2)/two
-           hy = sks * x - sk1*y - sk2*x*y
-           rfac = (arad * gamma**3 * el / three) * &
-                (hx**2 + hy**2) * (one + h*x) * (one - tan(e2)*x)
-           pt = orbit(6)
-           orbit(2) = orbit(2) - rfac * (one + pt) * orbit(2)
-           orbit(4) = orbit(4) - rfac * (one + pt) * orbit(4)
-           orbit(6) = orbit(6) - rfac * (one + pt) ** 2
-        endif
-     endif
+  if (fcentre) return
+
+  !---- Half radiation effects at exit.
+  if (ftrk .and. radiate) then
+    x =   orbit(1) * ct + orbit(3) * st
+    y = - orbit(1) * st + orbit(3) * ct
+    hx = h + dh + sk1*(x - h*y**2/two) + sks*y + sk2*(x**2 - y**2)/two
+    hy = sks * x - sk1*y - sk2*x*y
+    rfac = (arad * gamma**3 * el / three) * &
+         (hx**2 + hy**2) * (one + h*x) * (one - tan(e2)*x)
+    pt = orbit(6)
+    orbit(2) = orbit(2) - rfac * (one + pt) * orbit(2)
+    orbit(4) = orbit(4) - rfac * (one + pt) * orbit(4)
+    orbit(6) = orbit(6) - rfac * (one + pt) ** 2
   endif
 
 end SUBROUTINE tmbend
@@ -8120,39 +8117,39 @@ SUBROUTINE twcpin_print(rt,r0mat )
   write(2,*) "MADX   E=VU(1:2,1:2)/(-R)   " , -matmul(R0MAT_BAR,VU(3:4, 1:2))/r_det
   write(2,*) "det V = ", v(1,1) * v(2,2) - v(1,2) * v(2,1)
 
-     ! --Compute uncoupled block-diagonal U = g**2*[E 0, F 0]
-     U = zero
-     U = matmul(VBAR,VU)/(1 + r_det)
+  ! --Compute uncoupled block-diagonal U = g**2*[E 0, F 0]
+  U = zero
+  U = matmul(VBAR,VU)/(1 + r_det)
 
-     !---- Find diagonal blocks.
-     EM = U(1:2, 1:2)
-     FM = U(3:4, 3:4)
+  !---- Find diagonal blocks.
+  EM = U(1:2, 1:2)
+  FM = U(3:4, 3:4)
 
-     write(2,*) "MADX E=U(1:2,1:2) " , U(1:2, 1:2)
-     write(2,*) "MADX F=U(3:4,3:4) " , U(1:2, 1:2)
-     write(2,*) "MADX 0=U(1:2,3:4) " , U(1:2, 3:4)
-     write(2,*) "MADX 0=U(3:4,1:2) " , U(3:4, 1:2)
+  write(2,*) "MADX E=U(1:2,1:2) " , U(1:2, 1:2)
+  write(2,*) "MADX F=U(3:4,3:4) " , U(1:2, 1:2)
+  write(2,*) "MADX 0=U(1:2,3:4) " , U(1:2, 3:4)
+  write(2,*) "MADX 0=U(3:4,1:2) " , U(3:4, 1:2)
 
-     tmp = matmul(D,R0MAT) - C
-     e1 = matmul(R0MAT_BAR, TMP)/r_det ! another way to express E =
+  tmp = matmul(D,R0MAT) - C
+  e1 = matmul(R0MAT_BAR, TMP)/r_det ! another way to express E =
 
-     e11 = VU(1:2, 1:2)
-     f11 = VU(3:4, 3:4)
+  e11 = VU(1:2, 1:2)
+  f11 = VU(3:4, 3:4)
 
-     ! U = VBAR*M*V (Talman)
-     !A = gamma2*(A        + B*RA - RD*C - RD*D*RA)(talman) = gamma2*(A        -B*R - RBAR*C + RBAR*D*R) (madx)
-     !D = gamma2*(-RA*A*RD - RA*B + C*RD + D )     (talman) = gamma2*(R*A*RBAR +R*B + C*RBAR + D)        (madx)
-     et = gamma**2*(A - matmul(B,R0MAT) - matmul(R0MAT_BAR,C) + matmul(R0MAT_BAR,matmul(D,R0MAT)))
-     ft = gamma**2*(D + matmul(R0MAT,B) + matmul(C, R0MAT_BAR) + matmul(R0MAT,matmul(A,R0MAT_BAR)))
+  ! U = VBAR*M*V (Talman)
+  !A = gamma2*(A        + B*RA - RD*C - RD*D*RA)(talman) = gamma2*(A        -B*R - RBAR*C + RBAR*D*R) (madx)
+  !D = gamma2*(-RA*A*RD - RA*B + C*RD + D )     (talman) = gamma2*(R*A*RBAR +R*B + C*RBAR + D)        (madx)
+  et = gamma**2*(A - matmul(B,R0MAT) - matmul(R0MAT_BAR,C) + matmul(R0MAT_BAR,matmul(D,R0MAT)))
+  ft = gamma**2*(D + matmul(R0MAT,B) + matmul(C, R0MAT_BAR) + matmul(R0MAT,matmul(A,R0MAT_BAR)))
 
-     write(2,*) "Talman 0=U(1:2,3:4) ", U(1:2, 3:4)
-     write(2,*) "Talman 0=U(3:4,1:2) ", U(3:4,1:2)
+  write(2,*) "Talman 0=U(1:2,3:4) ", U(1:2, 3:4)
+  write(2,*) "Talman 0=U(3:4,1:2) ", U(3:4,1:2)
 
-     write(2,*) "E legacy (E=A-BR)         " , e
-     write(2,*) "E (E1=RBAR(DR - C)/||R||) " , e1
-     write(2,*) "E (E11 from VU=MV)        " , e11
-     write(2,*) "E (Et)(talman)            " , et
-     write(2,*) "E (Em)(E from E =VBARMV)  " , em
+  write(2,*) "E legacy (E=A-BR)         " , e
+  write(2,*) "E (E1=RBAR(DR - C)/||R||) " , e1
+  write(2,*) "E (E11 from VU=MV)        " , e11
+  write(2,*) "E (Et)(talman)            " , et
+  write(2,*) "E (Em)(E from E =VBARMV)  " , em
 
 end SUBROUTINE twcpin_print
 SUBROUTINE twcptk_print(re,r0mat, e, f)
