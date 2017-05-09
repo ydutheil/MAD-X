@@ -1804,7 +1804,11 @@ subroutine track_one_element
      RMAT0 = RMAT ; disp00 = disp
      if (rmatrix) RW0 = RW
 
-    call twcptk(re,orbit)
+    ! TG: the `fmap` condition is only an approximation of the previous
+    ! behaviour of the `centre` option - which was handled inconsistently
+    ! across different elements (some never called twcptk, some always did,
+    ! some only in certain cases):
+    if (fmap) call twcptk(re,orbit)
 
     call save_opt_fun()
     call twprep(save,1,opt_fun,currpos+el/two)
@@ -2860,7 +2864,8 @@ SUBROUTINE twchgo
      ORBIT00 = ORBIT ; EK00 = EK ; RE00 = RE ; TE00 = TE
      call tmmap(code,.true.,.true.,orbit,fmap,ek,re,te,.true.,.false.,el/two)
      centre_bttk = .true.
-     call twbttk(re,te)
+     ! TG: same comment as in twchgo (inconsistent center behaviour) applies here:
+     if (fmap) call twbttk(re,te)
      centre_bttk = .false.
      pos0 = currpos
      currpos = currpos + el/two
@@ -3363,7 +3368,7 @@ SUBROUTINE tmmap(code,fsec,ftrk,orbit,fmap,ek,re,te,entry_eff,exit_eff,dl)
         call tmyrot(ftrk,orbit,fmap,ek,re,te)
 
      case (code_hkicker, code_vkicker, code_kicker, code_tkicker)
-        call tmcorr(fsec,ftrk,orbit,fmap,el,ek,re,te)
+        call tmcorr(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
 
      case (code_beambeam)
         !---- (Particles/bunch taken for the opposite beam).
@@ -3385,7 +3390,7 @@ SUBROUTINE tmmap(code,fsec,ftrk,orbit,fmap,ek,re,te,entry_eff,exit_eff,dl)
         ! nothing for now...
 
      case (code_crabcavity)
-        call tmcrab(fsec,ftrk,orbit,fmap,el,ek,re,te)
+        call tmcrab(fsec,ftrk,orbit,fmap,dl,ek,re,te)
 
      case (code_hacdipole, code_vacdipole)
         ! nothing in MAD-X only used for conversion to sixtrack
@@ -3946,7 +3951,7 @@ SUBROUTINE tmtilt(fsec,tilt,ek,r,t)
 
 end SUBROUTINE tmtilt
 
-SUBROUTINE tmcorr(fsec,ftrk,orbit,fmap,el,ek,re,te)
+SUBROUTINE tmcorr(fsec,ftrk,exit_eff,orbit,fmap,el,dl,ek,re,te)
   use twtrrfi
   use math_constfi, only : zero, one, three, half
   use twissbeamfi, only : radiate, deltap, gamma, arad
@@ -3958,18 +3963,19 @@ SUBROUTINE tmcorr(fsec,ftrk,orbit,fmap,el,ek,re,te)
   !     Input:                                                           *
   !     fsec      (logical) if true, return second order terms.          *
   !     ftrk      (logical) if true, track orbit.                        *
+  !     exit_eff  (logical) exit effects.                                *
+  !     el        (double)  element length.                              *
   !     Input/output:                                                    *
   !     orbit(6)  (double)  closed orbit.                                *
   !     Output:                                                          *
   !     fmap      (logical) if true, element has a map.                  *
-  !     el        (double)  element length.                              *
   !     ek(6)     (double)  kick due to element.                         *
   !     re(6,6)   (double)  transfer matrix.                             *
   !     te(6,6,6) (double)  second-order terms.                          *
   !----------------------------------------------------------------------*
-  logical, intent(IN) :: fsec, ftrk
+  logical, intent(IN) :: fsec, ftrk, exit_eff
   logical, intent(OUT) :: fmap
-  double precision, intent(IN OUT) :: orbit(6), el
+  double precision, intent(IN OUT) :: orbit(6), el, dl
   double precision, intent(OUT) :: ek(6), re(6,6), te(6,6,6)
 
   logical :: cplxy
@@ -3986,7 +3992,7 @@ SUBROUTINE tmcorr(fsec,ftrk,orbit,fmap,el,ek,re,te)
 
   if ( .not. ftrk) then
      !---- No orbit track desired, use drift map.
-     call tmdrf(fsec,ftrk,orbit,fmap,el,ek,re,te)
+     call tmdrf(fsec,ftrk,orbit,fmap,dl,ek,re,te)
 
   else
      !---- Tracking desired, use corrector map.
@@ -4046,7 +4052,10 @@ SUBROUTINE tmcorr(fsec,ftrk,orbit,fmap,el,ek,re,te)
      endif
 
      !---- Drift to end.
-     if (el .ne. zero) call tmdrf(fsec,ftrk,orbit,fmap,el,ek,re,te)
+     if (el .ne. zero) then
+       call tmdrf(fsec,ftrk,orbit,fmap,dl,ek,re,te)
+       if (.not. exit_eff) return
+     endif
 
      !---- Half radiation effects at exit.
      if (radiate  .and.  el.ne.zero) then
