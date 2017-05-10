@@ -205,7 +205,7 @@ select_interp(struct command* cmd)
   int fixed_at = clear || at;
 
   struct node* node;
-  while ((node = fetch_node_select(iter, &sequ))) {
+  while (fetch_node_select(iter, &node, &sequ)) {
     if (node->length == 0)
       continue;
     if (step > 0)

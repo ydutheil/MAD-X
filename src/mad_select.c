@@ -37,14 +37,13 @@ start_iter_select(struct command* cmd, struct sequence_list* sequs, struct seque
   return it;
 }
 
-struct node*
-fetch_node_select(struct select_iter* it, struct sequence** seq)
+int
+fetch_node_select(struct select_iter* it, struct node** node, struct sequence** seq)
 {
   struct node* nodes[2];
 
-  // stop iteration immediately
   if (!it)
-    return NULL;
+    return 0;
 
   for (;;) {
     if (it->node) {
@@ -68,7 +67,8 @@ fetch_node_select(struct select_iter* it, struct sequence** seq)
 
     if (!it->node || it->full || pass_select(it->node->p_elem->name, it->cmd)) {
       if (seq) *seq = it->sequ;
-      return it->node;
+      if (node) *node = it->node;
+      return it->node != NULL;
     }
   }
 }
