@@ -80,44 +80,17 @@ get_select_ex_ranges(struct sequence* sequ, struct command_list* select, struct 
 {
   /*returns 0 if invalid sequence pointer
     1 if nodes in s_ranges (including 0) */
-  struct name_list* nl;
-  struct command* cd;
-  struct command_parameter_list* pl;
-  char* name;
-  int full = 0, i, pos; // k, // not used
   struct node* c_node;
-  struct node* nodes[2];
   if (sequ == NULL) return 0;
   s_ranges->curr = 0;
   s_ranges->list->curr = 0;
-  for (i = 0; i < select->curr; i++)
+  for (int i = 0; i < select->curr; i++)
   {
-    cd = select->commands[i];
-    nl = cd->par_names;
-    pl = cd->par;
-    pos = name_list_pos("full", nl);
-    if ((pos = name_list_pos("full", nl)) > -1 && nl->inform[pos]
-        && command_par_value("full", cd) != zero) full = 1;
-    if (full == 0 && (pos = name_list_pos("range", nl)) > -1
-        && nl->inform[pos])
-    {
-      name = pl->parameters[pos]->string;
-      if (get_ex_range(name, sequ, nodes) == 0) return 0; // (k = not used
+    struct select_iter* it = start_iter_select(select->commands[i], NULL, sequ);
+    while (fetch_node_select(it, &c_node, NULL)) {
+      add_to_node_list(c_node, 0, s_ranges);
     }
-    else
-    {
-      if ((nodes[0] = sequ->ex_start) == NULL ||
-          (nodes[1] = sequ->ex_end) == NULL) return 0;
-    }
-    c_node = nodes[0];
-    while (c_node != NULL)
-    {
-      if (full != 0 || pass_select(c_node->p_elem->name, cd) != 0)
-        add_to_node_list(c_node, 0, s_ranges);
-      if (c_node == nodes[1]) break;
-      c_node = c_node->next;
-    }
-    if (full != 0) break;
+    if (it->full) break;
   }
   return 1;
 }
