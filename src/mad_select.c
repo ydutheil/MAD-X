@@ -18,8 +18,9 @@ start_iter_select(struct command* cmd, struct sequence_list* sequs, struct seque
   if (!sequs)
     sequs = sequences;
 
-  if (!sequ && (name = command_par_string("sequence", cmd))) {
+  if (sequs && !sequ && (name = command_par_string("sequence", cmd))) {
     sequ = find_sequence(name, sequs);
+    sequs = NULL;
     if (!sequ) {
       warning("unknown sequence, skipped select: ", name);
       return NULL;
@@ -29,10 +30,8 @@ start_iter_select(struct command* cmd, struct sequence_list* sequs, struct seque
   struct select_iter* it = mycalloc("start_iter_select", 1, sizeof(struct select_iter));
   it->cmd = cmd;
   it->sequ = sequ ? sequ : sequs->sequs[0];
-  it->full = log_val("full", cmd);
-
-  // `full` has two meanings: all elements in sequence + all sequences
-  it->sequs = it->full ? sequs : NULL;
+  it->full = log_val("full", cmd);    // `full` means "unfiltered"
+  it->sequs = sequs;
   it->range = it->full ? NULL : command_par_string("range", cmd);
 
   return it;
@@ -62,12 +61,12 @@ fetch_node_select(struct select_iter* it, struct sequence** seq)
       it->range_end = it->sequ->ex_end;
     }
 
-    if (!it->node && it->full && it->i_seq != it->sequs->curr) {
+    if (!it->node && it->sequs && it->i_seq != it->sequs->curr) {
       it->sequ = it->sequs->sequs[++it->i_seq];
       continue;
     }
 
-    if (!it->node || pass_select(it->node->p_elem->name, it->cmd)) {
+    if (!it->node || it->full || pass_select(it->node->p_elem->name, it->cmd)) {
       if (seq) *seq = it->sequ;
       return it->node;
     }
