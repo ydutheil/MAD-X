@@ -730,3 +730,24 @@ replace_one(struct node* node, struct element* el)
     add_to_el_list(&el, 0, edit_sequ->cavities, 0);
 }
 
+// return node index into nl. must be within [start, stop].
+int
+get_node_index(const char* name, struct name_list* nl, int start, int stop)
+{
+  if (*name == '#') {
+    // using `strncmp` to allow '#start' etc (TG: this is broken IMO…)
+    if (strncmp(name, "#s", 2) == 0) return start;
+    if (strncmp(name, "#e", 2) == 0) return stop;
+    return -1;
+  }
+
+  char tmp[2*NAME_L];
+  strcpy(tmp, name);
+  if (square_to_colon(tmp) == 0)
+    return -1;
+
+  int pos = name_list_pos(tmp, nl);
+  if (pos < start || pos > stop)
+    return -1;
+  return pos;
+}
