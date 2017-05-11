@@ -264,7 +264,7 @@ next_constraint(char* name, int* name_l, int* type, double* value,
       double_from_table_row("twiss ",  name,   pos, val);
     }
     else {
-      *val = current_node->match_data[c_c->n_pos-1];
+      *val = c_c->evaluated;
       current_node_name(node_name, nn_len);
     }
 

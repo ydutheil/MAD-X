@@ -17,7 +17,7 @@ struct constraint /* contains one constraint */
                                 /* 4 value */
   int stamp;
   int n_pos;
-  double value, c_min, c_max, weight;
+  double value, c_min, c_max, weight, evaluated;
   struct expression *ex_value, *ex_c_min, *ex_c_max;
 };
 
