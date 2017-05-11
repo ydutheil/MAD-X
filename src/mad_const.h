@@ -32,6 +32,7 @@ struct constraint_list /* contains list of constraints */
 
 // interface
 
+struct constraint* clone_constraint(struct constraint*);
 struct constraint* delete_constraint(struct constraint*);   // used by mad_match.c
 void               dump_constraint(struct constraint*);     // used by mad_node.c
 
