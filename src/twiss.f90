@@ -375,7 +375,7 @@ SUBROUTINE twinifun(opt_fun0,rt)
 
 end SUBROUTINE twinifun
 
-SUBROUTINE twprep(save,case,opt_fun,position)
+SUBROUTINE twprep(save,case,opt_fun,position,ii)
   use twissafi
   use twisslfi
   use twissotmfi
@@ -388,11 +388,12 @@ SUBROUTINE twprep(save,case,opt_fun,position)
   !     Input:                                                           *
   !     case        (integer) =1 fill from twcpgo; =2 fill from twchgo   *
   !     position    (double)  end position of element                    *
+  !     ii          (integer) index of interpolated segment
   !     Input/output:                                                    *
   !     opt_fun(fundim) (double) optical values:                         *
   !     betx,alfx,amux,bety,alfy,amuy, etc.                              *
   !----------------------------------------------------------------------*
-  integer :: save, case
+  integer :: save, case, ii
   double precision :: opt_fun(*), position
 
   integer :: i
@@ -404,7 +405,7 @@ SUBROUTINE twprep(save,case,opt_fun,position)
      opt5 = opt_fun(5) ; opt_fun(5) = opt_fun(5) / twopi
      opt8 = opt_fun(8) ; opt_fun(8) = opt_fun(8) / twopi
      if (save .ne. 0) call twfill(case,opt_fun,position)
-     if (match_is_on) call copy_twiss_data(opt_fun, 0, 74)
+     if (match_is_on) call copy_twiss_data(opt_fun, 0, 74, ii)
      opt_fun(5) = opt5
      opt_fun(8) = opt8
 
@@ -415,7 +416,7 @@ SUBROUTINE twprep(save,case,opt_fun,position)
      opt23 = opt_fun(23) ; opt_fun(23) = opt_fun(23) / twopi
      opt24 = opt_fun(24) ; opt_fun(24) = opt_fun(24) / twopi
      if (save .ne. 0) call twfill(case,opt_fun,position)
-     if (match_is_on) call copy_twiss_data(opt_fun, 18, 10)! fill 10 values starting with wx
+     if (match_is_on) call copy_twiss_data(opt_fun, 18, 10, ii)! fill 10 values starting with wx
      opt_fun(20) = opt20
      opt_fun(21) = opt21
      opt_fun(23) = opt23
@@ -1792,7 +1793,7 @@ subroutine track_one_element(el, fexit)
     if (fmap) call twcptk(re,orbit)
 
     call save_opt_fun()
-    call twprep(save,1,opt_fun,currpos+el/two)
+    call twprep(save,1,opt_fun,currpos+el/two,i)
 
     call restore_optics()
   endif
@@ -1832,7 +1833,7 @@ subroutine track_one_element(el, fexit)
 
   call save_opt_fun()
   if (fexit) then
-     call twprep(save,1,opt_fun,currpos)
+     call twprep(save,1,opt_fun,currpos,i)
   endif
 
 end subroutine track_one_element
@@ -2882,7 +2883,7 @@ subroutine track_one_element(el, fexit)
      if (fmap) call twbttk(re,te)
 
      call save_opt_fun()
-     call twprep(save,2,opt_fun,zero)
+     call twprep(save,2,opt_fun,zero,i)
 
      call restore_optics()
   endif
@@ -2903,7 +2904,7 @@ subroutine track_one_element(el, fexit)
 
   call save_opt_fun()
   if (.not.centre) then
-     call twprep(save,2,opt_fun,zero)
+     call twprep(save,2,opt_fun,zero,i)
   else
      ! TODO: this is inconsistent
      opt_fun(5) = amux
