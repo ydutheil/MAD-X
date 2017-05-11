@@ -1742,6 +1742,7 @@ SUBROUTINE twcpgo(rt,orbit0)
       end do
       call track_one_element(el, .false.)
     else
+      i = 1
       call track_one_element(el, .not. centre)
     endif
     i = advance_node()
@@ -2851,6 +2852,7 @@ SUBROUTINE twchgo
       end do
       call track_one_element(el, .false.)
     else
+      i = 1
       call track_one_element(el, .not. centre)
     endif
     i = advance_node()
