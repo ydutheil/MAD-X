@@ -83,7 +83,7 @@ struct node*      delete_node_ring(struct node*);
 //void              grow_node_list(struct node_list* p);
 void              add_to_node_list(struct node*, int inf, struct node_list*);
 
-int     get_node_index(const char* name, struct name_list*, int start, int stop);
+struct node*      find_node_by_name(const char* name, struct node_list*, struct node* fst, struct node* lst);
 double  get_node_pos(struct node*, struct sequence*); /* recursive */
 double  get_refpos(struct sequence* sequ);
 double  hidden_node_pos(char* name, struct sequence*);

@@ -281,22 +281,18 @@ get_interval_sub_range(
 {
   if (sequ == NULL) return 0;
 
-  int i_start = name_list_pos(start->name, sequ->list);
-  int i_stop = name_list_pos(stop->name, sequ->list);
-
   char buf[5*NAME_L], *c[2];
   stolower(strcpy(buf, range));
   c[0] = strtok(buf, "/");
   int n = (c[1] = strtok(NULL,"/")) ? 2 : 1;
 
   for (int i = 0; i < n; i++) {
-    int pos = get_node_index(c[i], sequ->list, i_start, i_stop);
-    if (pos < 0) {
+    if (!(nodes[i] = find_node_by_name(c[i], sequ, start, stop))) {
       warning("illegal expand range ignored:", range);
       return 0;
     }
-    nodes[i] = sequ->nodes[pos];
   }
+
   if (n == 1) nodes[1] = nodes[0];
   return n;
 }

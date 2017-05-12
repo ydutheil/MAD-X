@@ -731,23 +731,25 @@ replace_one(struct node* node, struct element* el)
 }
 
 // return node index into nl. must be within [start, stop].
-int
-get_node_index(const char* name, struct name_list* nl, int start, int stop)
+struct node*
+find_node_by_name(const char* name, struct node_list* nl, struct node* start, struct node* stop)
 {
   if (*name == '#') {
     // using `strncmp` to allow '#start' etc (TG: this is broken IMO…)
+    // e.g. '#STARTAD' (test-sequence-3)
     if (strncmp(name, "#s", 2) == 0) return start;
     if (strncmp(name, "#e", 2) == 0) return stop;
-    return -1;
+    return NULL;
   }
 
   char tmp[2*NAME_L];
   strcpy(tmp, name);
   if (square_to_colon(tmp) == 0)
-    return -1;
+    return NULL;
 
-  int pos = name_list_pos(tmp, nl);
-  if (pos < start || pos > stop)
-    return -1;
-  return pos;
+  // TG: not checking for boundaries, because:
+  // - sometimes a node outside the range is requested (test-track-11).
+  // - start/stop may not even be registered into the node list (test-dynap).
+  int pos = name_list_pos(tmp, nl->list);
+  return pos >= 0 ? nl->nodes[pos] : NULL;
 }
