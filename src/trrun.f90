@@ -702,6 +702,7 @@ subroutine ttmap(switch,code,el,track,ktrack,dxt,dyt,sum,turn,part_id, &
   use name_lenfi
   use math_constfi, only : zero, one
   use code_constfi
+  use iso_c_binding, only:c_null_char
   implicit none
   !----------------------------------------------------------------------*
   ! Purpose:                                                             *
@@ -730,6 +731,13 @@ subroutine ttmap(switch,code,el,track,ktrack,dxt,dyt,sum,turn,part_id, &
   double precision :: offset(2), offx, offy
   double precision :: ek(6), re(6,6), te(6,6,6), craporb(6)
   character(len=name_len) :: aptype
+
+  !Pycollimate
+  logical :: interface_file
+  integer :: ktrack_new, status_pyc, n_lost, id_lost(ktrack)
+  double precision :: track_new(6, ktrack), s_lost(ktrack)
+  character(49) el_name
+
 
   integer, external :: get_option
   double precision, external :: get_value, node_value
@@ -869,6 +877,39 @@ subroutine ttmap(switch,code,el,track,ktrack,dxt,dyt,sum,turn,part_id, &
     case default ! The rest: do nothing
 
   end select
+
+  if( code.eq.code_ecollimator .or. &
+       code.eq.code_rcollimator .or. &
+       code.eq.code_collimator) then
+     interface_file = .False.
+     if(interface_file) then
+        ! Dump particles at the beginning of a collimator to a file
+        call wfile(track, part_id, sum, ktrack, theta, "outputf.dat")
+        ! Call pycollimate scattering routine
+        status_pyc = system ("python2.7 track_inside_coll.py")
+        if(status_pyc .ne. 0) then
+           call aawarn('python error: something went wrong in collimators - check your python script!')
+        endif
+        ! Read back the results of pycollimate
+        call rfile(track_new, ktrack, "outputp.dat")
+        do i = 1, ktrack
+           track(:, i) = track_new(:, i)
+        end do
+        ! Read file with absorbed particles inside collimator
+        ! The first element of the file is the number of absorbed particles
+        ! The second row is the list of the id number of the absorbed particles
+        ! The third row is a list of the final position of the particle wrt the beginning of the collimator
+     else
+        call element_name(el_name, len(el_name))
+        el_name(49:49) = c_null_char
+        call py_coll(el_name, theta, ktrack, track, part_id, &
+             n_lost, id_lost, s_lost)
+        write(*,*) 'py_coll server seems to have run OK'
+     endif
+     call absorb(aptype, turn, sum, part_id, last_turn, last_pos, last_orbit, track, ktrack, theta, "outabsf.dat", &
+          interface_file, n_lost, id_lost, s_lost)
+
+  endif
 
   ! This is where we should Test Aperture at exit of elements
   ! by calling trcoll again
@@ -5373,3 +5414,101 @@ subroutine wzsub(x,y,u,v)
   return
   !
 end subroutine wzsub
+
+subroutine wfile(data, id_list, sloc, col, angle, file_name)
+  ! Writes data to an ascii file were the first
+  ! line contains only the s location
+  use name_lenfi
+  
+  integer :: col, id_list(*)
+  double precision :: data(6, col), sloc, angle
+  character(11) :: file_name
+  character(name_len) el_name
+
+  open(unit=99, file=file_name,status='replace', form="formatted")
+  call element_name(el_name, len(el_name))
+  write (99, *) el_name
+  write(99, *) angle
+  do i = 1, 6
+    write(99, *) (data(i, j), j = 1, col)
+  end do
+  write(99, *) (id_list(j), j = 1, col)
+  
+  close(99)
+end subroutine wfile
+
+subroutine rfile(data, col, file_name)
+  character(11) :: file_name
+  integer :: col, unit
+  double precision :: data(6, col)
+  unit = 20
+  open(unit, file=file_name,status="old",action="read")
+  read(unit, *) col
+  !allocate(data(6, col))
+  !print *, "number of particles ", col
+
+  do i = 1, 6
+      read(unit, *) data(i, :)
+  end do
+  close(unit)
+end subroutine rfile
+
+subroutine absorb(aptype, turn, sum, part_id, last_turn, last_pos, last_orbit, data, col, angle, file_name, &
+     interface_file, n_lost, id_lost, s_lost)
+  use name_lenfi
+  
+  logical interface_file
+  character(name_len) aptype
+  character(11) :: file_name
+  integer :: col, unit, part_id(*), n_lost, id_lost(*), last_turn(*), turn, i, j, beg, n
+  double precision :: data(6, col), sum, s_lost(*), last_pos(*), last_orbit(6, *), id_lost_temp(col), angle, st, ct, tmp
+  if(interface_file) then
+     unit = 20
+     open(unit, file=file_name,status="old",action="read")
+     
+     read(unit, *) n_lost
+  endif
+
+  if (n_lost .ne. 0) then
+     if(interface_file) then
+        read(unit, *) id_lost_temp(1:n_lost)
+    
+        do i = 1, n_lost
+           id_lost(i) = int(id_lost_temp(i))
+        end do
+
+        read(unit, *) s_lost(1:n_lost)
+     endif
+
+    beg = 1
+    do j = 1, n_lost
+      do i = beg, col
+        if (part_id(i) .eq. id_lost(j)) then
+          n = i
+          go to 90
+        end if
+      end do
+      
+      90 continue
+      
+      if (angle .ne. 0d0)  then
+        st = sin(angle)
+        ct = cos(angle)
+        tmp = data(1, i)
+        data(1, i) = ct * tmp - st * data(3, i)
+        data(3, i) = ct * data(3, i) + st * tmp
+        tmp = data(2, i)
+        data(2, i) = ct * tmp - st * data(4, i)
+        data(4, i) = ct * data(4, i) + st * tmp
+      end if
+      
+      call trkill(n, turn, sum + s_lost(j), col, part_id, last_turn, last_pos, last_orbit, data, aptype)
+      beg = i
+    end do
+    
+  end if
+  
+  if(interface_file) then
+     close(unit)
+  endif
+end subroutine absorb
