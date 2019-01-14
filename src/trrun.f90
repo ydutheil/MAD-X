@@ -888,7 +888,8 @@ subroutine ttmap(switch,code,el,track,ktrack,dxt,dyt,sum,turn,part_id, &
         ! Call pycollimate scattering routine
         status_pyc = system ("python2.7 track_inside_coll.py")
         if(status_pyc .ne. 0) then
-           call aawarn('python error: something went wrong in collimators - check your python script!')
+           ! aawarn no longuer exists
+           ! call aawarn('python error: something went wrong in collimators - check your python script!')
         endif
         ! Read back the results of pycollimate
         call rfile(track_new, ktrack, "outputp.dat")
