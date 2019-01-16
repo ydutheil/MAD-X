@@ -5,7 +5,7 @@
 #include <arpa/inet.h>
 #include <stdlib.h>
 
-void py_coll_(char* el_name, double* theta, int* ktrack, double* track, int* part_id,
+void py_coll_(char* el_name, double* theta, int* ktrack, double* track, int* part_id, double* energy, 
               int* n_lost, int* id_lost, double* s_lost)
 {  
   struct sockaddr_in address;
@@ -48,6 +48,11 @@ void py_coll_(char* el_name, double* theta, int* ktrack, double* track, int* par
     return;
   }
 
+  if( send(socket_fd, energy, sizeof(*energy), 0) < 0 ) {
+    perror("sending energy failed");
+    return;
+  }
+  
 
   size_msg=((int) sizeof(*track))*6 *(*ktrack);
   /* printf("track size is %d \n", size_msg); */

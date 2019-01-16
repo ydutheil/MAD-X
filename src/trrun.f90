@@ -735,7 +735,7 @@ subroutine ttmap(switch,code,el,track,ktrack,dxt,dyt,sum,turn,part_id, &
   !Pycollimate
   logical :: interface_file
   integer :: ktrack_new, status_pyc, n_lost, id_lost(ktrack)
-  double precision :: track_new(6, ktrack), s_lost(ktrack)
+  double precision :: track_new(6, ktrack), s_lost(ktrack), energy
   character(49) el_name
 
 
@@ -901,9 +901,10 @@ subroutine ttmap(switch,code,el,track,ktrack,dxt,dyt,sum,turn,part_id, &
         ! The second row is the list of the id number of the absorbed particles
         ! The third row is a list of the final position of the particle wrt the beginning of the collimator
      else
+        energy = get_value('probe ', 'energy ')
         call element_name(el_name, len(el_name))
         el_name(49:49) = c_null_char
-        call py_coll(el_name, theta, ktrack, track, part_id, &
+        call py_coll(el_name, theta, ktrack, track, part_id, energy, &
              n_lost, id_lost, s_lost)
         write(*,*) 'py_coll server seems to have run OK'
      endif
