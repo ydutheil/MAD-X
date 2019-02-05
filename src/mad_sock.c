@@ -3,30 +3,42 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <sys/un.h>
 #include <stdlib.h>
 
 void py_coll_(char* el_name, double* theta, int* ktrack, double* track, int* part_id, double* energy, 
               int* n_lost, int* id_lost, double* s_lost)
 {  
-  struct sockaddr_in address;
+  /* struct sockaddr_in address; */
+  struct sockaddr_un address;
   int socket_fd, size_msg;
     
   /* setting and openning socket */
-  socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+
+  /* socket internet style */
+  /* socket_fd = socket(AF_INET, SOCK_STREAM, 0); */
+
+  /* address.sin_addr.s_addr = inet_addr("127.0.0.1"); */
+  /* address.sin_family = AF_INET; */
+  /* address.sin_port = htons( 50007 ); */
+
+  /* socket UNIX style */
+  socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+
+  address.sun_family = AF_UNIX;
+  strcpy(address.sun_path, "./socket.s");
+
+  
   if (socket_fd < 0){
     printf("socket() failed\n");
     return ;
   } 
-
-  address.sin_addr.s_addr = inet_addr("127.0.0.1");
-  address.sin_family = AF_INET;
-  address.sin_port = htons( 50007 );
-
+  
   if( connect(socket_fd, (struct sockaddr *) &address, sizeof(address)) < 0) {
     perror("connect failed");
     exit(-1);
   }
-  
+
 
   size_msg = strlen(el_name);
   /* printf("el_name is length %d \n", size_msg); */
