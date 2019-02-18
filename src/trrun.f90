@@ -904,9 +904,13 @@ subroutine ttmap(switch,code,el,track,ktrack,dxt,dyt,sum,turn,part_id, &
         energy = get_value('probe ', 'energy ')
         call element_name(el_name, len(el_name))
         el_name(49:49) = c_null_char
-        call py_coll(el_name, theta, ktrack, track, part_id, energy, &
-             n_lost, id_lost, s_lost)
-        write(*,*) 'py_coll server seems to have run OK'
+        if(ktrack>0) then
+           call py_coll(el_name, theta, ktrack, track, part_id, energy, &
+                n_lost, id_lost, s_lost)
+        else
+           n_lost = 0
+        endif
+        write(*,*) 'py_coll server seems to have run OK for ', el_name
      endif
      call absorb(aptype, turn, sum, part_id, last_turn, last_pos, last_orbit, track, ktrack, theta, "outabsf.dat", &
           interface_file, n_lost, id_lost, s_lost)
