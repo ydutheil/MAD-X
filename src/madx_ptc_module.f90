@@ -71,7 +71,10 @@ MODULE madx_ptc_module
   real(dp) :: my_ring_length
   
   character(1000), private  :: whymsg
-
+  external :: aafail, dcopy, get_node_vector, fort_warn
+  external :: element_name, node_name, node_string
+  external :: augment_count, string_to_table_curr, vector_to_table_curr
+  external :: make_map_table, seterrorflag, comm_para, double_to_table_curr
 CONTAINS
 
   subroutine resetclocks()
@@ -113,19 +116,19 @@ CONTAINS
     if (getdebug()==0) global_verbose = .false.
 
     lielib_print =  (/0,0,0,0,0,0,0,0,0,0,0,0,0,0,0/)
-	 !  lielib_print(1)=1   lieinit prints info
-	 !  lielib_print(2)=1   expflo warning if no convergence
-	 !  lielib_print(3)=1   Shows details in flofacg
-	 !  lielib_print(4)=1   tunes and damping
-	 !  lielib_print(5)=1  order in orbital normal form
-	 !  lielib_print(6)=1  symplectic condition
-	 !  lielib_print(7)=-1  go manual in normal form  (use auto command in fpp)
-	 !  lielib_print(8)=-1  To use nplane from FPP normalform%plane
-	 !  lielib_print(9)=1  print in checksymp(s1,norm) in j_tpsalie.f90
-	 !  lielib_print(10)=1  print lingyun's checks
-	 !  lielib_print(11)=1  print warning about Teng-Edwards
-	 !  lielib_print(12)=1  print info in make_node_layout
-	 !  lielib_print(13)=1  print info of normal form kernel into file kernel.txt and kernel_spin.txt
+   !  lielib_print(1)=1   lieinit prints info
+   !  lielib_print(2)=1   expflo warning if no convergence
+   !  lielib_print(3)=1   Shows details in flofacg
+   !  lielib_print(4)=1   tunes and damping
+   !  lielib_print(5)=1  order in orbital normal form
+   !  lielib_print(6)=1  symplectic condition
+   !  lielib_print(7)=-1  go manual in normal form  (use auto command in fpp)
+   !  lielib_print(8)=-1  To use nplane from FPP normalform%plane
+   !  lielib_print(9)=1  print in checksymp(s1,norm) in j_tpsalie.f90
+   !  lielib_print(10)=1  print lingyun's checks
+   !  lielib_print(11)=1  print warning about Teng-Edwards
+   !  lielib_print(12)=1  print info in make_node_layout
+   !  lielib_print(13)=1  print info of normal form kernel into file kernel.txt and kernel_spin.txt
                      !  lielib_print(14)=1  print info about recutting
                      !  lielib_print(15)=1  print info during flat file reading and printing
 
@@ -974,7 +977,7 @@ CONTAINS
        sk0=node_value('k0 ')
 
        ! quadrupole components
-       sk1= node_value('k1 ')
+       sk1= node_value('k1 ')+node_value('k1tap ')
        sk1s=node_value('k1s ')
        tilt=node_value('tilt ')
        dum1=key%list%k(2)-normal_0123(1)
@@ -1021,7 +1024,7 @@ CONTAINS
        CALL SUMM_MULTIPOLES_AND_ERRORS (l, key, normal_0123,skew_0123,ord_max)
 
        ! sextupole components
-       sk2= node_value('k2 ')
+       sk2= node_value('k2 ') + node_value('k2tap ')
        sk2s=node_value('k2s ')
        tilt=node_value('tilt ')
        dum1=key%list%k(3)-normal_0123(2)
@@ -1202,7 +1205,7 @@ CONTAINS
        key%list%volt=bvk*node_value('volt ')
        freq=c_1d6*node_value('freq ')
 
-       key%list%lag = -node_value('lag ')*twopi
+       key%list%lag = -(node_value('lag ')+node_value('lagtap ') )*twopi
 
 
        offset_deltap=get_value('ptc_create_layout ','offset_deltap ')
@@ -1303,7 +1306,7 @@ CONTAINS
        key%magnet="CHANGEREF"
        PATCH_ANG = zero
        PATCH_TRANS = zero
-       patch_ang(2)=-node_value('angle ')
+       patch_ang(2)=node_value('angle ')
        key%list%patchg=2
        do i=1,3
           key%list%ang(i)=patch_ang(i)
@@ -1411,12 +1414,33 @@ CONTAINS
        key%list%psi=node_value("psi ")
        key%list%harmon=one
        if(key%list%volt.ne.zero.and.key%list%freq0.ne.zero) icav=1
+    case(34) ! XROTATION
+       key%magnet="CHANGEREF"
+       PATCH_ANG = zero
+       PATCH_TRANS = zero
+       patch_ang(1)=node_value('angle ')
+       key%list%patchg=2
+       do i=1,3
+          key%list%ang(i)=patch_ang(i)
+          key%list%t(i)=patch_trans(i)
+       enddo
     case(35)
        key%magnet="CHANGEREF"
        PATCH_ANG = zero
        PATCH_TRANS = zero
        call get_node_vector('patch_ang ',3,patch_ang)
        call get_node_vector('patch_trans ',3,patch_trans)
+       key%list%patchg=2
+       do i=1,3
+          key%list%ang(i)=patch_ang(i)
+          key%list%t(i)=patch_trans(i)
+       enddo
+    case(36) ! TRANSLATION
+       key%magnet="CHANGEREF"
+       PATCH_ANG = zero
+       patch_trans(1)=node_value('dx ')
+       patch_trans(2)=node_value('dy ')
+       patch_trans(3)=node_value('ds ')
        key%list%patchg=2
        do i=1,3
           key%list%ang(i)=patch_ang(i)
@@ -1770,13 +1794,14 @@ CONTAINS
     type(keywords), INTENT(INOUT) ::  key
     REAL(dp), INTENT(OUT) :: normal_0123(0:3), skew_0123(0:3) ! n/l;
     REAL(dp) :: normal(0:maxmul), skew  (0:maxmul), &
-         f_errors(0:maxferr), field(2,0:maxmul)
+         f_errors(0:maxferr), field(2,0:maxmul), bk0
     INTEGER :: n_norm, n_skew, n_ferr ! number of terms in command line
     INTEGER :: n_max
     INTEGER :: node_fd_errors ! function
     integer :: i, i_count, n_dim_mult_err, ord_max
 
     double precision, parameter :: zero=0.d0
+    real(kind(1d0))   ::  node_value
 
     !initialization
     normal_0123(:)=zero
@@ -1884,7 +1909,10 @@ CONTAINS
           endif                                                !
        enddo                                                   !
     endif !====================================================!
-
+    if (key%magnet == 'sbend' .or. key%magnet == 'rbend') then 
+      bk0 = node_value('k0 ')
+      if(bk0 .ne. 0) key%list%k(1) = key%list%k(1) + bk0 - node_value('angle ')/l
+    endif
 
     ord_max=max(ord_max,n_max)
 
@@ -3129,9 +3157,9 @@ CONTAINS
                                      map_coor(9)=j(5)
                                      map_coor(10)=j(6)
                                      call vector_to_table_curr("map_table ", 'coef ', map_coor(1), i_map_coor)
-                  	                 write(coeffCode,'(i1,a1,6i1)') i,'_',j(1:c_%npara)
-                  	                 coeffCode = 'c'//coeffCode(1:8)//CHAR(0)
-                  	                 call string_to_table_curr("map_table ", "name ", coeffCode);
+                                     write(coeffCode,'(i1,a1,6i1)') i,'_',j(1:c_%npara)
+                                     coeffCode = 'c'//coeffCode(1:8)//CHAR(0)
+                                     call string_to_table_curr("map_table ", "name ", coeffCode);
                                      call augment_count("map_table ")
                                   endif
                                   !write(0,*) 'write coef', coef
@@ -3167,9 +3195,9 @@ CONTAINS
                                  map_coor(9)=j(5)
                                  map_coor(10) = 0
                                  call vector_to_table_curr("map_table ", 'coef ', map_coor(1), i_map_coor)
-	                               write(coeffCode,'(i1,a1,6i1)') i,'_',j(1:5),0   !anyway fixed above
+                                 write(coeffCode,'(i1,a1,6i1)') i,'_',j(1:5),0   !anyway fixed above
                                  coeffCode = 'c'//coeffCode(1:8)//CHAR(0)
-	                               call string_to_table_curr("map_table ", "name ", coeffCode);
+                                 call string_to_table_curr("map_table ", "name ", coeffCode);
                                  call augment_count("map_table ")
                                endif
                             endif
@@ -3201,9 +3229,9 @@ CONTAINS
                                map_coor(9)=0
                                map_coor(10)=0
                                call vector_to_table_curr("map_table ", 'coef ', map_coor(1), i_map_coor)
-	                             write(coeffCode,'(i1,a1,6i1)') i,'_',j(1:4),0,0
+                               write(coeffCode,'(i1,a1,6i1)') i,'_',j(1:4),0,0
                                coeffCode = 'c'//coeffCode(1:8)//CHAR(0)
-	                             call string_to_table_curr( "map_table ", "name ", coeffCode );
+                               call string_to_table_curr( "map_table ", "name ", coeffCode );
                                call augment_count("map_table ")
                             endif
                          endif
@@ -3397,7 +3425,7 @@ CONTAINS
     elseif(code.eq.6) then
        ! sextupole components code = 6
        k=3
-       sk= node_value('k2 ')
+       sk= node_value('k2 ')+node_value('k2tap ')
        sks=node_value('k2s ')
        tilt=node_value('tilt ')
        b(k)=sk

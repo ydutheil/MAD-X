@@ -13,6 +13,8 @@ make_sequ_node(struct sequence* sequ, int occ_cnt)
   current_node->next = NULL;
 }
 
+
+
 static struct sequence_list*
 delete_sequence_list(struct sequence_list* sql)
 {
@@ -1718,6 +1720,10 @@ sequ_check_valid_twiss(struct sequence * sequ)
   return sequ->tw_table != NULL && sequ->tw_valid;
 }
 
+int get_ncavities(void){
+  return current_sequ->cavities->curr;
+}
+
 int
 set_cont_sequence(void)
 {
@@ -2128,11 +2134,11 @@ exec_save(struct in_cmd* cmd)
   }
 
   fclose(out_file);
-  if (sqo != sequences) sqo = delete_sequence_list(sqo);
-  sql = delete_sequence_list(sql);
-  ell = delete_el_list(ell);
-  varl = delete_var_list(varl);
-  current_sequ = NULL;
+//  if (sqo != sequences) sqo = delete_sequence_list(sqo);
+//  sql = delete_sequence_list(sql);
+ // ell = delete_el_list(ell);
+ // varl = delete_var_list(varl);
+ // current_sequ = NULL;
 }
 
 void

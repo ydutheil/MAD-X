@@ -14,7 +14,7 @@ endif()
 file(GLOB sdds_remove matchsdds.c)
 file(GLOB mkthin_remove mad_mkthin.c)
 
-if(NOT MADX_FORCE_32)
+if(MADX_LAPACK AND NOT MADX_FORCE_32)
    find_package(LAPACK)
 endif()
 
@@ -33,6 +33,7 @@ file(GLOB headerfiles *.h)
 add_library(madx ${src_files})
 
 target_link_libraries(madx ptc)
+target_link_libraries(madx DISTlib)
 
 if(USE_GC)
    target_link_libraries(madx gc-lib)

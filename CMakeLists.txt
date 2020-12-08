@@ -4,11 +4,9 @@ set(CMAKE_LEGACY_CYGWIN_WIN32 0) # Remove when CMake >= 2.8.4 is required
 
 PROJECT(madX C CXX Fortran)
 
-if(COMMAND cmake_policy)
-  cmake_policy(SET CMP0003 NEW)
-  if(${CMAKE_VERSION} VERSION_GREATER 2.99999)
+cmake_policy(VERSION 2.8...3.18)
+if (NOT ${CMAKE_VERSION} VERSION_LESS 3.0)
     cmake_policy(SET CMP0042 NEW)
-  endif()
 endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
@@ -30,6 +28,7 @@ include(setupCompilerSpecifics)
 include(setupArchSpecifics)
 
 add_subdirectory(libs/ptc)
+add_subdirectory(libs/DISTlib)
 add_subdirectory(src)
 add_subdirectory(tools)
 add_subdirectory(syntax)

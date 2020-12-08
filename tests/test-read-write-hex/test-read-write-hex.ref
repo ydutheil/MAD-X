@@ -1,0 +1,134 @@
+
+  ++++++++++++++++++++++++++++++++++++++++++++
+  +     MAD-X 5.06.01  (64 bit, Linux)       +
+  + Support: mad@cern.ch, http://cern.ch/mad +
+  + Release   date: 2020.09.01               +
+  + Execution date: 2020.09.25 14:31:24      +
+  ++++++++++++++++++++++++++++++++++++++++++++
+circum=15;
+
+
+
+var1 = 0X1.999999929999AP-4;
+
+rfcav: RFCAVITY, VOLT=100, LAG=var1 , L = 0.1, Freq=100, fringe=1	;
+
+
+
+ip5: marker ;
+
+set, format="A";
+
+
+
+seq: sequence, refer=center, l=circum;
+
+rfcavi:rfcav, at = 1;
+
+endsequence;
+
+
+
+beam;
+
+
+
+use, sequence=seq;
+
+
+
+
+
+
+
+select, flag=twiss, column=name, s, x,px, y,py, pt,t, betx, bety;
+
+
+
+twiss, betx=1, bety=1, file="twiss_hex.dat",chrom;
+
+enter Twiss module
+  
+open line - error with deltap:   1.000000E-06
+initial orbit vector:   0.000000E+00  0.000000E+00  0.000000E+00  0.000000E+00  0.000000E+00  0.000000E+00
+final orbit vector:     0.000000E+00  0.000000E+00  0.000000E+00  0.000000E+00  1.959259E-07  5.877847E-02
+  
+open line - error with deltap:   0.000000E+00
+initial orbit vector:   0.000000E+00  0.000000E+00  0.000000E+00  0.000000E+00  0.000000E+00  0.000000E+00
+final orbit vector:     0.000000E+00  0.000000E+00  0.000000E+00  0.000000E+00  1.959304E-07  5.877853E-02
+
+++++++ table: summ
+
+length orbit5 alfa gammatr 
+0X1.EP+3 -0X0P+0 0X0P+0 0X0P+0 
+
+q1 dq1 betxmax dxmax 
+0X1.D6AC55503BE33P-3 0X1.FDEAEECB82445P-8 0X1.EA8010EE7A3EFP+7 0X0P+0 
+
+dxrms xcomax xcorms q2 
+0X0P+0 0X0P+0 0X0P+0 0X1.D6AC55503BE33P-3 
+
+dq2 betymax dymax dyrms 
+0X1.FDEAEECB82445P-8 0X1.EA8010EE7A3EFP+7 0X0P+0 0X0P+0 
+
+ycomax ycorms deltap synch_1 
+0X0P+0 0X0P+0 0X0P+0 0X0P+0 
+
+synch_2 synch_3 synch_4 synch_5 
+0X0P+0 0X0P+0 0X0P+0 0X0P+0 
+
+synch_6 synch_8 nflips 
+0X0P+0 0X0P+0 0X0P+0 
+
+
+save, sequence=seq, file=seq_hex.seq;
+
+++++++ warning: SAVE makes all previous USE invalid !  
+
+
+call, file="seq_hex.seq";
+
+none = 0X0P+0;
+
+rfcav: rfcavity,l:=0X1.999999999999AP-4,volt:=0X1.9P+6,lag:=0X1.999999929999AP-4,freq:=0X1.9P+6,fringe:= 1;
+
+++++++ info: element redefined: rfcav
+rfcavi: rfcav;
+
+++++++ info: element redefined: rfcavi
+seq: sequence, l = 0X1.EP+3;
+
+rfcavi: rfcav, at = 0X1P+0;
+
+++++++ warning: implicit element re-definition ignored: rfcavi
+endsequence;
+
+
+
+set, format="22.14e";
+
+
+
+save, sequence=seq, file=seq_ascii.seq;
+
+++++++ warning: SAVE makes all previous USE invalid !  
+
+
+READMYTABLE, FILE="twiss_hex.dat", TABLE=myhex;
+
+Want to make named table: myhex
+
+
+WRITE, TABLE=myhex, FILE=fodoloaded.twiss;
+
+
+
+stop;
+
+
+  Number of warnings: 3
+3 in C and 0 in Fortran
+
+  ++++++++++++++++++++++++++++++++++++++++++++
+  +          MAD-X finished normally         +
+  ++++++++++++++++++++++++++++++++++++++++++++

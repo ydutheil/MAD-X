@@ -12,6 +12,7 @@ subroutine trrun(switch, turns, orbit0, rt, part_id, last_turn, last_pos, &
   use matrices, only : EYE
   use math_constfi, only : zero, one, two
   use code_constfi
+  use SpaceCharge
   use track_enums
   implicit none
   !----------------------------------------------------------------------*
@@ -51,43 +52,23 @@ subroutine trrun(switch, turns, orbit0, rt, part_id, last_turn, last_pos, &
   logical :: onepass, onetable, last_out, info, aperflag, doupdate, debug
   logical :: run=.false.,dynap=.false., thin_foc, onlyaver
   logical, save :: first=.true.
-  logical :: bb_sxy_update, virgin_state, emittance_update
-  logical :: checkpnt_restart, fast_error_func, exit_loss_turn
+  logical :: fast_error_func
   integer :: i, j, k, code, ffile
   integer :: n_align, nlm, j_tot, turn, nobs, lobs
   integer :: nint, ndble, nchar, char_l, tot_segm, int_arr(1)
-  integer, save :: jmax, segment
-  integer, save :: tot_turn=0
-
-  integer, parameter :: max_part=20000
-  integer, save :: part_id_keep(max_part), last_turn_keep(max_part)
-
+  
   double precision :: orbit(6), el, re(6,6), deltap, sum, spos
   double precision :: al_errors(align_max), zz(6), maxaper(6), obs_orb(6)
-
-  double precision, save :: betx_start=one, bety_start=one
-  double precision, save :: alfx_start=zero, alfy_start=zero
-  double precision, save :: gamx_start=zero, gamy_start=zero
-  double precision, save :: dx_start=zero,   dpx_start=zero
-  double precision, save :: dy_start=zero,   dpy_start=zero
-  double precision, save :: ex_rms0=zero, ey_rms0=zero, sigma_p0=zero, sigma_z0=zero
-  double precision, save :: N_ions_in_beam, Npart_gain, N_ions_ini, n_ions_macro, N_ions_for_bb
-  double precision, save :: sigma_z_ini, z_factor, t_rms, pt_rms, z_keep(6,max_part)
-
+    
   character(len=12) :: tol_a='maxaper ', char_a=' '
   character(len=name_len) :: el_name
   character(len=4) :: vec_names(7)
   data vec_names /'x', 'px', 'y', 'py', 't', 'pt', 's'/
   character(len=20) :: text
 
-!VVK 20100321 -------------------------------------------------
-  integer :: i_part                     ! local counter
-  double precision  :: Summ_t_mean      ! local for mean value
-  double precision  :: Summ_t_square    ! local for rms value
-!-------------------------------------------------------------------
-
   integer, external :: restart_sequ, advance_node, get_option, node_al_errors, get_nnodes
   double precision, external :: node_value, get_variable, get_value, node_obs_point
+
   external :: set_tt_attrib, alloc_tt_attrib, set_tt_multipoles, get_tt_multipoles
 
   ! 2015-Jul-08  19:16:53  ghislain: make code more readable
@@ -133,29 +114,8 @@ subroutine trrun(switch, turns, orbit0, rt, part_id, last_turn, last_pos, &
   endif
 
   !---- get options for space charge variables
-  exit_loss_turn = get_option('exit_loss_turn ') .ne. 0
-  bb_sxy_update = get_option('bb_sxy_update ') .ne. 0
-  checkpnt_restart = get_value('run ', 'checkpnt_restart ') .ne. zero
-  emittance_update = get_option('emittance_update ') .ne. 0
-  virgin_state = get_value('run ', 'virgin_state ') .ne. zero
-
-  if (run .and. bb_sxy_update) then
-     open(90,file='checkpoint_restart.dat',form='unformatted',status='unknown')
-  else if (dynap) then
-     bb_sxy_update = .false.
-     checkpnt_restart = .false.
-  endif
-
-  if (bb_sxy_update) then
-     if (virgin_state) first=.true.
-     call table_input( betx_start, bety_start, &
-                       alfx_start, alfy_start, &
-                       gamx_start, gamy_start, &
-                       dx_start,    dpx_start, &
-                       dy_start,    dpy_start)
-     if (first) call make_bb6d_ixy(turns)
-  endif
-
+  call SC_Init(first, run, dynap, turns);
+  
   if (fsecarb) then
      call fort_warn('TRRUN: ','Second order terms of arbitrary Matrix not allowed for tracking.')
      return
@@ -290,47 +250,8 @@ subroutine trrun(switch, turns, orbit0, rt, part_id, last_turn, last_pos, &
   !--- loop over turns
   nobs = 0
 
-  if (bb_sxy_update) then
-     trrun_nt = 0
-
-     if (first) then
-        time_var_m_cnt = 0 ; time_var_p_cnt = 0 ; time_var_c_cnt = 0
-        ! <<N_macro_part_ini = N_macro_surv + N_macro_lost>>
-        N_ions_in_beam = get_value('probe ', 'npart ') !BEAM->NPART
-        if (N_ions_in_beam .lt. zero) call fort_fail('TRRUN: ','N_ions_in_beam .lt. zero')
-        Npart_gain = get_value('run ', 'n_part_gain ')
-        N_ions_ini = Npart_gain * N_ions_in_beam
-        N_macro_surv = jmax    ! = number of START lines submitted
-        n_ions_macro = N_ions_ini/N_macro_surv
-
-        N_for_I = N_macro_surv ! at start (to be redefined in Ixy)
-        if (N_macro_surv .gt. N_macro_max) &
-             call fort_fail('TRRUN: ', 'Number N_macro_surv exceeds N_macro_max (array size)')
-
-        ! 2015-Jul-03  18:07:00  ghislain: BUG or voluntary ?
-        if (N_macro_surv .gt. N_macro_surv) &
-             call fort_fail('TRRUN: ', 'Number START-lines exceeds the initial number of macroparticles N_macro_surv')
-
-        t_rms = get_value('run ', 'sigma_z ') * beti
-        pt_rms = get_value('run ', 'deltap_rms ')
-        pt_rms = (sqrt((betas * (pt_rms + one))**2 + one/gammas**2) - one) * beti
-        sigma_z_ini = t_rms !betas: BEAM->BETA
-        sigma_z = sigma_z_ini !at start (to be redefined in Ixy)
-        sigma_p = pt_rms       !default
-        z_factor = one !at start sigma_z_ini/sigma_z
-        Ex_rms = get_value('probe ', 'ex ') !BEAM->Ex
-        Ey_rms = get_value('probe ', 'ey ') !BEAM->Ey
-        if (checkpnt_restart.and.emittance_update) then
-           Ex_rms = Ex_rms0
-           Ey_rms = Ey_rms0
-        endif
-
-        ! write(8,'(4(g16.9,1x))') Ex_rms, Ey_rms,sigma_z,sigma_p
-
-        first = .false.
-     endif
-  endif
-
+  call BB_Init(first);
+  
   turnloop: do turn = 1, turns
 
      !--- Write checkpoint_restart data - disable for speed reasons
@@ -348,122 +269,11 @@ subroutine trrun(switch, turns, orbit0, rt, part_id, last_turn, last_pos, &
 
      j = restart_sequ()
 
-     if (bb_sxy_update) then
-        trrun_nt = turn
-        time_var_m_lnt = 0 ; time_var_p_lnt = 0 ; time_var_c_lnt = 0
-
-        N_macro_surv = jmax
-        i_spch = 0 !a special spch-update counter
-
-        ex_rms0 = ex_rms
-        ey_rms0 = ey_rms
-        sigma_z0 = sigma_z
-        sigma_p0=sigma_p
-        !sigma_p0 = sigma_p !CM, 3/11/14
-        !fill, table=Ixy_unsorted; column=i_macro_part, Ix, Iy, dpi, z_part;
-        !new on 3/31/14:
-!frs on 04.06.2016 - fixing
-!a) bug concerning sigma_p
-!b) Filling data in file bb6d_ixy.txt even for "emittance_update = .false.",
-!   obviously without update!
-!c) Fixing checkpnt_restart for "emittance_update = .false." which
-!   worked for ".true." alright.
-!        if (emittance_update) then
-           call ixy_calcs(betas, orbit0, z, &
-                          betx_start, bety_start, &
-                          alfx_start, alfy_start, &
-                          gamx_start, gamy_start, &
-                          dx_start,    dpx_start, &
-                          dy_start,    dpy_start)
-           call ixy_fitting()
-
-           call double_to_table_curr('bb6d_ixy ', 'turn ', dble(tot_turn+turn))
-           call double_to_table_curr('bb6d_ixy ', 'n_macro_surv ', dble(n_macro_surv))
-           call double_to_table_curr('bb6d_ixy ', 'n_for_i ', dble(n_for_i))
-           call double_to_table_curr('bb6d_ixy ', 'ex_rms ', ex_rms)
-           call double_to_table_curr('bb6d_ixy ', 'ey_rms ', ey_rms)
-           call double_to_table_curr('bb6d_ixy ', 'sigma_p ', sigma_p)
-           call double_to_table_curr('bb6d_ixy ', 'sigma_z ', sigma_z)
-           call augment_count('bb6d_ixy ')
-
-           if (sigma_p0 .eq. zero) sigma_p0 = sigma_p
-!frs on 04.06.2016 - fixing
-!a) bug concerning sigma_p
-!b) Filling data in file bb6d_ixy.txt even for "emittance_update = .false.",
-!   obviously without update!
-!c) Fixing checkpnt_restart for "emittance_update = .false." which
-!   worked for ".true." alright.
-           !new on 3/31/14:
-!        endif
-
-        if (.not.emittance_update) then
-           ex_rms = ex_rms0
-           ey_rms = ey_rms0
-           sigma_z = sigma_z0
-           sigma_p = sigma_p0
-        endif
-!frs on 04.06.2016 - fixing
-!a) bug concerning sigma_p
-!b) Filling data in file bb6d_ixy.txt even for "emittance_update = .false.",
-!   obviously without update!
-!c) Fixing checkpnt_restart for "emittance_update = .false." which
-!   worked for ".true." alright.
-!           sigma_p=sigma_p0
-        z_factor = one
-        if ( sigma_z.gt.zero .and. sigma_z_ini.gt.zero) z_factor = sigma_z_ini/sigma_z
-
-        N_ions_for_bb = n_ions_macro * N_for_I * z_factor
-        if (N_ions_in_beam .le. zero) then
-           rat_bb_n_ions = zero
-        else
-           rat_bb_n_ions = N_ions_for_bb/N_ions_in_beam
-        endif
-
-        time_var_m = .false. ; time_var_p = .false. ; time_var_c = .false.
-        if (idnint(time_var_m_nt(time_var_m_cnt+1)) .eq. tot_turn+turn) time_var_m=.true.
-        if (idnint(time_var_p_nt(time_var_p_cnt+1)) .eq. tot_turn+turn) time_var_p=.true.
-        if (idnint(time_var_c_nt(time_var_c_cnt+1)) .eq. tot_turn+turn) time_var_c=.true.
-     endif ! bb_sxy_update
+     call BB_Update(jmax, orbit0, z);
 
      nlm = 0
      sum = zero
 
-!frs on 04.06.2016 - fixing
-!a) bug concerning sigma_p
-!b) Filling data in file bb6d_ixy.txt even for "emittance_update = .false.",
-!   obviously without update!
-!c) Fixing checkpnt_restart for "emittance_update = .false." which
-!   worked for ".true." alright.
-!frs on 07.06.2016 - fixing
-!  longitudinal plane must be frozen too!
-     if (bb_sxy_update) then
-        if(emittance_update.or.(.not.emittance_update.and.mean_t.eq.0d0.and.sigma_t.eq.0d0)) then
-        !VVK 20100321 -------- Find RMS-value of t ----------------------
-        ! if we do 1-turn tracking, orbit0(5)=0 always
-           Summ_t_mean = zero
-           do i_part = 1, jmax
-              if (abs(z(5,i_part)) .ge. zero) then
-                 Summ_t_mean = Summ_t_mean + z(5,i_part)
-              else
-                 print *, 'NaN z(5,i) ? :', i_part, z(5,i_part)
-              endif
-           enddo
-           mean_t = Summ_t_mean/dble(jmax)
-
-           Summ_t_square = zero
-           do i_part = 1, jmax
-              if (abs(z(5,i_part)) .ge. zero) &
-                   Summ_t_square = Summ_t_square + (z(5,i_part) - mean_t)**2
-           enddo
-           sigma_t = sqrt(Summ_t_square/dble(jmax))
-
-           if (abs(sigma_t) .eq. zero) then
-              sigma_t=t_max/two
-              call fort_warn('TTRUN Frozen SC: sigma_t = zero: ','sigma_t set to L/track_harmon/betas/2')
-           endif
-        endif
-        !-----------------------------------------------------------------
-     endif
 
 
 
@@ -489,7 +299,6 @@ subroutine trrun(switch, turns, orbit0, rt, part_id, last_turn, last_pos, &
            if ((code.eq.code_sextupole .or. &
               code.eq.code_octupole .or. &
               code.eq.code_elseparator .or. &
-              code.eq.code_rfcavity .or. &
               code.eq.code_crabcavity) .and. el.ne.zero) then
               !if (.not. (is_drift() .or. is_thin() .or. is_quad() .or. is_dipole() .or. is_matrix()) ) then
               call element_name(el_name,len(el_name))
@@ -531,39 +340,8 @@ subroutine trrun(switch, turns, orbit0, rt, part_id, last_turn, last_pos, &
              last_turn, last_pos, last_orbit, aperflag, maxaper, al_errors, onepass, debug, theta, thin_foc)
 
         !-------- Space Charge update
-!frs on 04.06.2016 - fixing
-!a) bug concerning sigma_p
-!b) Filling data in file bb6d_ixy.txt even for "emittance_update = .false.",
-!   obviously without update!
-!c) Fixing checkpnt_restart for "emittance_update = .false." which
-!   worked for ".true." alright.
-        ex_rms0=ex_rms
-        ey_rms0=ey_rms
-        sigma_z0=sigma_z
-        sigma_p0=sigma_p
-        if (bb_sxy_update .and. is_lost) then
-           call ixy_calcs(betas, orbit0, z,       &
-                          betx_start, bety_start, &
-                          alfx_start, alfy_start, &
-                          gamx_start, gamy_start, &
-                          dx_start,    dpx_start, &
-                          dy_start,    dpy_start)
-           call ixy_fitting()
-           is_lost = .false.
-        endif
-        if( .not. emittance_update) then
-           ex_rms=ex_rms0
-           ey_rms=ey_rms0
-           sigma_z=sigma_z0
-           sigma_p=sigma_p0
-        endif
-!frs on 04.06.2016 - fixing
-!a) bug concerning sigma_p
-!b) Filling data in file bb6d_ixy.txt even for "emittance_update = .false.",
-!   obviously without update!
-!c) Fixing checkpnt_restart for "emittance_update = .false." which
-!   worked for ".true." alright.
-
+        call SC_Update(orbit0, z);
+        
         !--------  Misalignment at end of element (from twissfs.f)
         if (code .ne. code_drift .and. n_align.ne.0)  then
            do i = 1, jmax
@@ -649,21 +427,8 @@ subroutine trrun(switch, turns, orbit0, rt, part_id, last_turn, last_pos, &
   enddo
   turn = min(turn, turns)
 
-  if (bb_sxy_update) then
-     tot_turn = tot_turn + turn
-!$OMP PARALLEL PRIVATE(i,j)
-!$OMP DO
-     do i = 1, jmax
-        part_id_keep(i) = part_id(i)
-        last_turn_keep(i) = last_turn(i)
-        do j=1,6
-           z_keep(j,i) = z(j,i)
-        enddo
-     enddo
-!$OMP END DO
-!$OMP END PARALLEL
-  endif
-
+  call BB_Update2(jmax, orbit0, z, part_id, last_turn);
+  
   !--- enter last turn in tables if not done already
   if (run .and. .not.last_out)  then
      if (onetable)  then
@@ -679,22 +444,8 @@ subroutine trrun(switch, turns, orbit0, rt, part_id, last_turn, last_pos, &
   endif
 
   !--- Write checkpoint_restart data
-  if (bb_sxy_update) then
-     rewind 90
-     write(90) jmax
-     write(90) Ex_rms
-     write(90) Ey_rms
-     do i = 1, jmax
-        do j = 1, 6
-           write(90) z(j,i)
-        enddo
-     enddo
-!frs on 07.06.2016 - fixing
-!  longitudinal plane must be frozen too!
-     write(90) sigma_t
-     write(90) mean_t
-  endif
-
+  call BB_Write(jmax, orbit0, z);
+  
   !--- enter last turn in summary table
   do  i = 1, j_tot
      call double_to_table_curr('tracksumm ', 'number ', dble(i))
@@ -962,6 +713,9 @@ subroutine ttmap(switch,code,el,track,ktrack,dxt,dyt,sum,turn,part_id, &
     case (code_rfmultipole)
        call ttrfmult(track,ktrack,turn)
 
+    case(code_changerefp0)
+      call ttchangep0(track,ktrack)
+
     case (code_hmonitor:code_rcollimator, code_instrument, &
         code_slmonitor:code_imonitor, code_placeholder, code_collimator)
         if(el .gt. 0) call ttdrf(el,track,ktrack)
@@ -1062,11 +816,11 @@ SUBROUTINE  ttmult_cf_mini(track,ktrack,dxt,dyt,turn, thin_foc)
   dipr = bvk * normal(0) !vals(1,0)
   dipi = bvk * skew(0)  
 
-  !!print *, "ggggg_old", gstr, sstr
+
      ! cf magnet with quadrupole & sextupole
      gstr = normal(1)/elrad
      sstr = normal(2)/elrad
-     !print *, "uuuu", gstr, sstr, dipr, dipi
+
     do jtrk = 1,ktrack
        x = track(1,jtrk)
        px0 = track(2,jtrk)
@@ -1080,7 +834,6 @@ SUBROUTINE  ttmult_cf_mini(track,ktrack,dxt,dyt,turn, thin_foc)
        ! particle
        deltapp = bet0i*sqrt((1d0 + bet0*orb60)**2 - 1 + bet0**2)
        
-       !deltapp = 0 !HASSSSSSSSSSSSSSSST TOB CHANGE 
        ! orbit transformation:
        ! attention: The following formulas constitute only the kick part
        ! of the CF in a drift-kick-drift decomposition.
@@ -1109,7 +862,7 @@ end SUBROUTINE ttmult_cf_mini
 
 SUBROUTINE  ttmult_cf(track,ktrack,dxt,dyt,turn, thin_foc)
   use twtrrfi
-  use twissbeamfi, only : deltap, beta
+  use twissbeamfi, only : beta
   use math_constfi, only : zero, one, two, three
   use time_varfi
   use trackfi
@@ -1139,9 +892,8 @@ SUBROUTINE  ttmult_cf(track,ktrack,dxt,dyt,turn, thin_foc)
   integer :: nord, k, j, nn, ns, bvk, iord, n_ferr, jtrk, nd
   integer, external :: Factorial
   double precision :: dpx, dpy, tilt, kx, ky, elrad, bp1, h0
-  double precision :: dipr, dipi, dbr, dbi, dtmp, an, angle, tilt2
+  double precision :: dtmp, an, angle, tilt2, etahat
   double precision :: normal(0:maxmul), skew(0:maxmul), f_errors(0:maxferr)
-  !double precision :: orbit(6),
   double complex :: kappa, barkappa, sum0, del_p_g, pkick, dxdpg, dydpg, &
                     dxx, dxy, dyy, rp, rm
   double complex :: lambda(0:maxmul)
@@ -1162,7 +914,6 @@ SUBROUTINE  ttmult_cf(track,ktrack,dxt,dyt,turn, thin_foc)
   an = get_tt_attrib(enum_angle)
   time_var = get_tt_attrib(enum_time_var) .ne. 0  
 
-  
   !---- Multipole components.
   NORMAL(0:maxmul) = zero! ; call get_node_vector('knl ',nn,normal)
   SKEW(0:maxmul) = zero  ! ; call get_node_vector('ksl ',ns,skew)
@@ -1172,31 +923,14 @@ SUBROUTINE  ttmult_cf(track,ktrack,dxt,dyt,turn, thin_foc)
   !---- Angle (no bvk in track)
   if (an .ne. 0) f_errors(0) = f_errors(0) + normal(0) - an
 
-
-
   !-----added FrankS, 10-12-2008
-  !nd = 2 * max(nn, ns, n_ferr/2-1)
-
-  !---- Dipole error.
-  !      dbr = bvk * field(1,0) / (one + deltas)
-  !      dbi = bvk * field(2,0) / (one + deltas)
-  dbr = bvk * f_errors(0) !field(1,0)
-  dbi = bvk * f_errors(1) !field(2,0)
-
-  !---- Nominal dipole strength.
-  !      dipr = bvk * vals(1,0) / (one + deltas)
-  !      dipi = bvk * vals(2,0) / (one + deltas)
-  dipr = bvk * normal(0) !vals(1,0)
-  dipi = bvk * skew(0)   !vals(2,0)
-
+  nd = 2 * max(nn, ns, n_ferr/2-1)
 
   !Below here should not be commented output
   !---- Other components and errors.
   ! that loop should start at one since nominal dipole strength already taken into account above
   !needs to be here though
   nord = 0
-  nd = 2 * max(nn, ns, n_ferr/2-1)
-
   do iord = 1, nd/2
      f_errors(2*iord)   = bvk * (f_errors(2*iord) + normal(iord))
      f_errors(2*iord+1) = bvk * (f_errors(2*iord+1) + skew(iord))
@@ -1209,7 +943,6 @@ SUBROUTINE  ttmult_cf(track,ktrack,dxt,dyt,turn, thin_foc)
   if (elrad.gt.zero) then
     lambda(0) = (normal(0) + (0, 1)*skew(0))/elrad
      do k = 1, nord
-        ! The factor (one + deltap) below is taken from the original MAD-X routine.
         lambda(k) = (f_errors(2*k) + (0, 1)*f_errors(2*k+1))/elrad/Factorial(k)
      enddo
   else
@@ -1245,7 +978,10 @@ SUBROUTINE  ttmult_cf(track,ktrack,dxt,dyt,turn, thin_foc)
      g(k + 1, k + 1) = conjg(g(k + 1, 0))
   enddo
 
-   do jtrk = 1,ktrack
+  do jtrk = 1, ktrack
+     etahat = sqrt(two*track(6,jtrk)/beta + track(6,jtrk)**2 + one) - one ! etahat = deltap of individual particle
+     h0 = sqrt((one + etahat)**2 - track(2,jtrk)**2 - track(4,jtrk)**2)
+
      rp = (track(1,jtrk) + (0, 1)*track(3,jtrk))/two
      rm = conjg(rp)
 
@@ -1259,16 +995,16 @@ SUBROUTINE  ttmult_cf(track,ktrack,dxt,dyt,turn, thin_foc)
         del_p_g = del_p_g + sum0
      enddo
      ! Now compute kick (Eqs. (38) in Ref. above)
-     !pkick = elrad*(barkappa*(one + deltap) + del_p_g)
-    pkick = elrad*(barkappa+ del_p_g)
+     pkick = elrad*(barkappa*h0 + del_p_g)
      dpx = real(pkick)
      dpy = - aimag(pkick)
-     track(2,jtrk) = track(2,jtrk) + dpx! - dbr
-     track(4,jtrk) = track(4,jtrk) + dpy! + dbi
+     track(1, jtrk) = track(1, jtrk) + elrad*(kx*track(1, jtrk) + ky*track(3, jtrk))*track(2, jtrk)/h0
+     track(2, jtrk) = track(2, jtrk) + dpx
+     track(3, jtrk) = track(3, jtrk) + elrad*(kx*track(1, jtrk) + ky*track(3, jtrk))*track(4, jtrk)/h0
+     track(4, jtrk) = track(4, jtrk) + dpy
      ! N.B. orbit(5) = \sigma/beta and orbit(6) = beta*p_\sigma
-     track(5,jtrk) = track(5,jtrk) - elrad*(kx*track(1,jtrk) + ky*track(3,jtrk)) &
-                *(one + beta*track(6,jtrk))/(one + deltap)/beta
-  
+     track(5, jtrk) = track(5, jtrk) - elrad*(kx*track(1, jtrk) + ky*track(3, jtrk)) &
+                *(one + beta*track(6, jtrk))/beta/(one + etahat)
   enddo
 
 
@@ -1698,7 +1434,7 @@ subroutine ttrf(track,ktrack)
   use name_lenfi
   use time_varfi
   use trackfi
-  use math_constfi, only : zero, one, two, ten3m, ten6p, twopi
+  use math_constfi, only : zero, one, two, ten3m, ten6p, twopi, half,pi
   use phys_constfi, only : clight
   implicit none
   !----------------------------------------------------------------------*
@@ -1718,10 +1454,11 @@ subroutine ttrf(track,ktrack)
   !----------------------------------------------------------------------*
   double precision :: track(6,*)
   integer :: ktrack, itrack, get_option
-  logical :: time_var
+  logical :: time_var, Fringe
   integer :: i, mylen
   double precision :: omega, phirf, pt, rff, rfl, rfv, vrf, pc0, bvk
-  double precision :: bucket_half_length, dummy
+  double precision :: bucket_half_length, dummy, tcorr
+  double precision :: el, V, c1(ktrack), s1(ktrack), jc
   !      double precision px,py,ttt,beti,el1
   character(len=name_len) :: name
 
@@ -1730,9 +1467,7 @@ subroutine ttrf(track,ktrack)
   !---- BV flag
   bvk = node_value('other_bv ')
 
-  !---- Fetch data.
-  !      el = node_value('l ')
-  !      el1 = node_value('l ')
+
   rfv = bvk * node_value('volt ')
 
   !---- Time Variation
@@ -1753,86 +1488,49 @@ subroutine ttrf(track,ktrack)
   endif
 
   rff = node_value('freq ')
-  rfl = node_value('lag ')
-  !      deltap = get_value('probe ','deltap ')
-  !      deltas = get_variable('track_deltap ')
-  !      pc = get_value('probe ','pc ')
+  rfl = node_value('lag ')+node_value('lagtap ')
   pc0 = get_value('beam ','pc ')
-  !      betas = get_value('probe ','beta ')
-  !      gammas= get_value('probe ','gamma ')
-  !      dtbyds = get_value('probe ','dtbyds ')
-
-  !      print *,"RF cav.  volt=",rfv, "  freq.",rff
-
-  !*---- Get the longitudinal wakefield filename (parameter #17).
-  !      if (iq(lcelm+melen+15*mcsiz-2) .eq. 61) then
-  !        lstr = iq(lcelm+melen+15*mcsiz)
-  !        call uhtoc(iq(lq(lcelm-17)+1), mcwrd, lfile, 80)
-  !      else
-  !        lfile = ' '
-  !      endif
-
-  !*---- Get the transverse wakefield filename (parameter #18).
-  !      if (iq(lcelm+melen+16*mcsiz-2) .eq. 61) then
-  !        lstr = iq(lcelm+melen+16*mcsiz)
-  !        call uhtoc(iq(lq(lcelm-18)+1), mcwrd, tfile, 80)
-  !      else
-  !        tfile = ' '
-  !      endif
-
-  !*---- If there are wakefields split the cavity.
-  !      if (lfile .ne. ' ' .or. tfile .ne. ' ') then
-  !        el1 = el / two
-  !        rfv = rfv / two
-  !        lwake = .true.
-  !      else
-  !        el1 = el
-  !        lwake = .false.
-  !      endif
-  !---- Set up.
   omega = rff * (ten6p * twopi / clight)
+
   ! vrf   = rfv * ten3m / (pc * (one + deltas))
   vrf   = rfv * ten3m
   phirf = rfl * twopi
   ! dl    = el / two
   ! bi2gi2 = one / (betas * gammas) ** 2
+  el  = node_value('l ')
+  fringe = node_value('fringe ') .gt. zero
+  if(el .gt. zero) then
+    if(fringe) then
+      tcorr = el/(2*betas)
+      jc = one
+      V = jc*vrf/(pc0*el)
+      s1=sin(phirf - omega*(TRACK(5,1:ktrack)+tcorr))
+      c1=cos(phirf - omega*(TRACK(5,1:ktrack)+tcorr))
+
+      TRACK(2,1:ktrack)=TRACK(2,1:ktrack)-V*S1*(TRACK(1,1:ktrack))*half
+      TRACK(4,1:ktrack)=TRACK(4,1:ktrack)-V*S1*(TRACK(3,1:ktrack))*half
+      TRACK(6,1:ktrack)=TRACK(6,1:ktrack)+0.25d0*(TRACK(1,1:ktrack)**2+TRACK(3,1:ktrack)**2)*V*c1*omega
+    endif
+    call ttdrf(el/2,track,ktrack)
+  endif
 
   TRACK(6,1:ktrack) = TRACK(6,1:ktrack) +  vrf * sin(phirf - omega*TRACK(5,1:ktrack)) / pc0
 
-  !*---- If there were wakefields, track the wakes and then the 2nd half
-  !*     of the cavity.
-  !      if (lwake) then
-  !        call ttwake(two*el1, nbin, binmax, lfile, tfile, ener1, track,
-  !     +              ktrack)
-  !
-  !*---- Track 2nd half of cavity -- loop for all particles.
-  !      do 20 i = 1, ktrack
-  !
-  !*---- Drift to centre.
-  !         px = track(2,i)
-  !         py = track(4,i)
-  !         pt = track(6,i)
-  !         ttt = one/sqrt(one+two*pt*beti+pt**2 - px**2 - py**2)
-  !         track(1,i) = track(1,i) + dl*ttt*px
-  !         track(3,i) = track(3,i) + dl*ttt*py
-  !         track(5,i) = track(5,i)
-  !     +        + dl*(beti - (beti+pt)*ttt) + dl*pt*dtbyds
-  !
-  !*---- Acceleration.
-  !         pt = pt + vrf * sin(phirf - omega * track(5,i))
-  !         track(6,i) = pt
-  !
-  !*---- Drift to end.
-  !         ttt = one/sqrt(one+two*pt*beti+pt**2 - px**2 - py**2)
-  !         track(1,i) = track(1,i) + dl*ttt*px
-  !         track(3,i) = track(3,i) + dl*ttt*py
-  !         track(5,i) = track(5,i)
-  !     +        + dl*(beti - (beti+pt)*ttt) + dl*pt*dtbyds
-  ! 20   continue
-  !      endif
+  if(el .gt. zero) then
+    call ttdrf(el/2,track,ktrack)
+    if(fringe) then
+      jc = -one
+      V = jc*vrf/(pc0*el)
+      s1=sin(phirf - (omega)*(TRACK(5,1:ktrack)+jc*tcorr))
+      c1=cos(phirf - (omega)*(TRACK(5,1:ktrack)+jc*tcorr))
 
-  !! frs add-on (bring lost particules back to the bucket long-term studies)
-  if(get_option('bucket_swap ').eq.1) then
+      TRACK(2,1:ktrack)=TRACK(2,1:ktrack)-V*S1*(TRACK(1,1:ktrack))*half
+      TRACK(4,1:ktrack)=TRACK(4,1:ktrack)-V*S1*(TRACK(3,1:ktrack))*half
+      TRACK(6,1:ktrack)=TRACK(6,1:ktrack)+0.25d0*(TRACK(1,1:ktrack)**2+TRACK(3,1:ktrack)**2)*V*c1*omega
+    endif
+  endif
+
+   if(get_option('bucket_swap ').eq.1) then
     bucket_half_length = &
       get_value('probe ','circ ') / (two * get_value('probe ', 'beta ') &
                                      * node_value('harmon '));
@@ -1844,7 +1542,35 @@ subroutine ttrf(track,ktrack)
     enddo
   endif
   !! frs add-on end
+ 
 end subroutine ttrf
+
+subroutine ttchangep0(track,ktrack)
+  use math_constfi, only : zero, two, one
+  use phys_constfi, only : clight
+  implicit none
+  double precision :: track(6,*) 
+  double precision :: get_value, bet0
+  double precision :: pc0, px_, py_, pt_, onedp
+  integer :: i, ktrack
+
+  pc0 = get_value('beam ','pc ')
+  bet0 = get_value('beam ','beta ')
+  do i =1, ktrack
+    px_ = track(1,i)
+    py_ = track(3,i)
+    pt_ = track(6,i) 
+    
+    onedp   = sqrt( one + two*pt_/bet0 + (pt_**2))
+
+    TRACK(2,i) = TRACK(2,i)/onedp
+    TRACK(4,i) = TRACK(4,i)/onedp
+    TRACK(6,i) = zero
+  end do
+
+end subroutine ttchangep0
+
+
 
 subroutine ttcrabrf(track,ktrack,turn)
   use math_constfi, only : zero, ten3m, ten6p, twopi
@@ -1919,7 +1645,8 @@ subroutine ttcrabrf(track,ktrack,turn)
 
   TRACK(6,1:ktrack) = TRACK(6,1:ktrack) - &
        omega * vrf * TRACK(1,1:ktrack) * cos(phirf - bvk*omega*TRACK(5,1:ktrack))
-
+  
+ 
 end subroutine ttcrabrf
 
 subroutine tthacdip(track,ktrack,turn)
@@ -2813,13 +2540,13 @@ subroutine ttbb_hollowparabolic(track,ktrack,fk)
 
 end subroutine ttbb_hollowparabolic
 
-subroutine trkill(n, turn, sum, jmax, part_id, &
+subroutine trkill(n, turn, sum, ntrk, part_id, &
      last_turn, last_pos, last_orbit, z, aptype)
   use name_lenfi
-  use spch_bbfi
+  use trackfi
   implicit none
 
-  integer :: n, turn, jmax, part_id(*), last_turn(*)
+  integer :: n, turn, ntrk, part_id(*), last_turn(*)
   double precision :: z(6,*), last_pos(*), last_orbit(6,*), sum
   character(len=name_len) :: aptype
 
@@ -2866,11 +2593,11 @@ subroutine trkill(n, turn, sum, jmax, part_id, &
 
   if (recloss) call tt_ploss(part_id(n),turn,sum,torb,el_name)
 
-  do i = n+1, jmax
+  do i = n+1, ntrk
      part_id(i-1) = part_id(i)
      Z(:,i-1) = Z(:,i)
   enddo
-  jmax = jmax - 1
+  ntrk = ntrk - 1
 
 end subroutine trkill
 
@@ -3792,6 +3519,7 @@ subroutine trsol(track,ktrack,dxt,dyt)
 end subroutine trsol
 
 subroutine tttrans(track,ktrack)
+  use trackfi, only : betas
   implicit none
   !----------------------------------------------------------------------*
   ! Purpose:                                                             *
@@ -3799,6 +3527,7 @@ subroutine tttrans(track,ktrack)
   ! Input/output:                                                        *
   !   TRACK(6,*)(double)    Track coordinates: (X, PX, Y, PY, T, PT).    *
   !----------------------------------------------------------------------*
+  
   double precision :: track(6,*)
   integer :: ktrack
 
@@ -3806,20 +3535,21 @@ subroutine tttrans(track,ktrack)
   double precision :: t_x, t_y, t_z
   double precision :: node_value
 
+
   !---- Get translation parameters
   t_x    = node_value('dx ')
   t_y    = node_value('dy ')
   t_z    = node_value('ds ')
 
   !---- Loop over particles
-
-  call ttdrf(-t_z,track,ktrack)
+  
 !$OMP PARALLEL PRIVATE(i)
 !$OMP DO
   do  i = 1, ktrack
      ! Add vector to particle coordinates
      track(1,i) = track(1,i) - t_x
      track(3,i) = track(3,i) - t_y
+     track(5,i) = track(5,i) - t_z/betas
   enddo
 
 !$OMP END DO
@@ -3866,13 +3596,14 @@ subroutine trupdate(turn)
   !   turn     (integer)    Current turn number.                         *
   !----------------------------------------------------------------------*
   integer       :: turn
-  character(len=50) :: cmd
+  character(len=25) :: cmd1
+  character(len=30) :: cmd2
 
   !---- call pro_input('TR$TURN := turn;')
-  write(cmd, '(''tr$turni := '',i8,'' ; '')') turn
-  call pro_input(cmd)
-  write(cmd, '(''exec, tr$macro($tr$turni) ; '')')
-  call pro_input(cmd)
+  write(cmd1, '(''tr$turni := '',i8,'' ; '')') turn
+  call pro_input(cmd1)
+  write(cmd2, '(''exec, tr$macro($tr$turni) ; '')')
+  call pro_input(cmd2)
   call init_elements() ! added since now temporary variables are used and need to update
 end subroutine trupdate
 
@@ -3992,7 +3723,6 @@ subroutine trclor(switch,orbit0)
             (code.eq.code_sextupole .or. &
             code.eq.code_octupole .or. &
             code.eq.code_elseparator .or. &
-            code.eq.code_rfcavity .or. &
             code.eq.code_crabcavity) .and. el.ne.zero) then
            !  .not.(is_drift() .or. is_thin() .or. is_quad() .or. is_dipole() .or. is_matrix()) ) then
            print *,"\ncode: ",code," el: ",el,"   THICK ELEMENT FOUND\n"
@@ -4079,457 +3809,6 @@ subroutine trclor(switch,orbit0)
   write (*,'(a,1p,6e14.6)')                 'orbit: ', ORBIT0
 
 end subroutine trclor
-
-subroutine ixy_fitting()
-  use name_lenfi
-  use bbfi
-  use spch_bbfi
-  use math_constfi, only : zero, one
-  implicit none
-
-  integer :: i, iii, jjj
-  integer :: i_for_I
-  double precision :: Summ_dpi_square, Summ_z_part_square
-  double precision :: Summ_x, Summ_y
-  double precision :: Ix(N_macro_max), Iy(N_macro_max)
-  double precision :: dpi(N_macro_max), z_part(N_macro_max)
-  double precision :: Ix_sorted(N_macro_max), Iy_sorted(N_macro_max)
-  double precision :: Ix_min,Iy_min, Ix_min_last,Iy_min_last
-  ! I_x/Ex_rms+I_y/Ey_rms <= I_div_E_sum_max
-  ! limit for particles taken for Ix, Iy evaluations
-  double precision :: Ix_i, Iy_i, dpi_i, z_part_i, Ixy_rel_summ, N_for_I_dble
-  double precision :: c_sumx, y_sumx, t_sumx, c_sumy, y_sumy, t_sumy, a_sum
-  double precision :: J0x, J0y, Sum_Jx, Sum_Jy
-  double precision, parameter :: ce10=1d10
-
-  integer, external :: get_option
-  double precision, external :: get_value
-
-  !----------------------------------------------------------------------
-  J0x=zero; J0y=zero; Sum_Jx=zero; Sum_Jy=zero
-
-
-
-  i_for_I=0     ! I-evaluations
-  I_div_E_sum_max = get_value('run ', 'i_div_e_sum_max ')
-  DO i=1,N_macro_surv
-     Ix_i=Ix_array(i)
-     Iy_i=Iy_array(i)
-     dpi_i=dpi_array(i)
-     z_part_i=z_part_array(i)
-! Lethal bug found by Valery!!!
-!     Ixy_rel_summ=Ix_i/Ex_rms+Iy_i/Ex_rms
-     Ixy_rel_summ=Ix_i/Ex_rms+Iy_i/Ey_rms
-     if (Ixy_rel_summ .LE. I_div_E_sum_max) then
-        i_for_I=i_for_I+1
-        Ix(i_for_I)=Ix_i
-        Iy(i_for_I)=Iy_i
-        dpi(i_for_I)=dpi_i
-        z_part(i_for_I)=z_part_i
-     endif
-  ENDDO
-  if (i_for_I.eq.0) then
-     call fort_warn('trrun: ','the RMS emittances cannot be calculated: exit from IXY_FITTING');
-     return
-  endif
-  N_for_I=i_for_I
-
-  N_for_I_dble=dble(N_for_I)
-
-  !     rms of the relative momentum
-  Summ_dpi_square = zero
-  sigma_p_loop: DO iii=1, N_for_I
-     Summ_dpi_square = Summ_dpi_square + dpi(iii)**2
-  ENDDO sigma_p_loop
-
-  Summ_dpi_square = Summ_dpi_square / N_for_I_dble
-  if (Summ_dpi_square .ge. zero) then
-     sigma_p=sqrt(Summ_dpi_square)
-  else
-     call fort_fail('IXY_FITTING: Fatal: ','Summ_dpi_square<0')
-  endif
-
-  !     rms of the bunch length
-  Summ_z_part_square = zero
-  sigma_z_loop: DO iii=1, N_for_I
-     Summ_z_part_square = Summ_z_part_square + z_part(iii)**2
-  ENDDO sigma_z_loop
-  Summ_z_part_square = Summ_z_part_square / N_for_I_dble
-  if (Summ_z_part_square .ge. zero) then
-     sigma_z = sqrt(Summ_z_part_square)
-  else
-     call fort_fail('IXY_FITTING: Fatal: ','Summ_z_part_square<0')
-  endif
-
-  !     SORTING Ix
-  Ix_min_last = zero
-  iii_loop: DO iii=1, N_for_I
-
-     Ix_min=ce10
-!$OMP PARALLEL PRIVATE(jjj) SHARED(Ix_min)
-!$OMP DO REDUCTION(MIN:Ix_min)
-     jjj_loop: DO jjj=1,N_for_I
-        if (Ix(jjj) < Ix_min .AND. Ix(jjj) > Ix_min_last) then
-           Ix_min=Ix(jjj)
-        endif
-     ENDDO jjj_loop
-!$OMP END DO
-!$OMP END PARALLEL
-     Ix_sorted(iii) = Ix_min
-     Ix_min_last = Ix_min
-  ENDDO iii_loop
-
-  Iy_min_last = zero
-  iii_loop_y: DO iii=1, N_for_I
-
-     Iy_min=ce10
-!$OMP PARALLEL PRIVATE(jjj) SHARED(Iy_min)
-!$OMP DO REDUCTION(MIN:Iy_min)
-     jjj_loop_y: DO jjj=1,N_for_I
-        if (Iy(jjj) < Iy_min .AND. Iy(jjj) > Iy_min_last) then
-           Iy_min=Iy(jjj)
-        endif
-     ENDDO jjj_loop_y
-!$OMP END DO
-!$OMP END PARALLEL
-     Iy_sorted(iii) = Iy_min
-     Iy_min_last = Iy_min
-  ENDDO iii_loop_y
-
-!New normalisation of the emittance calculation to exclude artificial collapses
-!R.Wasef
-  J0x = zero
-  J0y = zero
-  jjj_loop_ray: DO jjj=1,N_for_I
-           J0x = J0x + Ix_sorted(jjj)
-           J0y = J0y + Iy_sorted(jjj)
-  ENDDO jjj_loop_ray
-  J0x = J0x / (N_for_I_dble*N_for_I_dble)
-  J0y = J0y / (N_for_I_dble*N_for_I_dble)
-  J0x = J0x*J0x
-  J0y = J0y*J0y
-
-  Sum_Jx = zero
-  Sum_Jy = zero
-  jjj_loop_ray2: DO jjj=1,N_for_I
-          Sum_Jx = Sum_Jx + ( (Ix_sorted(jjj)*Ix_sorted(jjj)) /( J0x+(Ix_sorted(jjj)*Ix_sorted(jjj)) ) )
-          Sum_Jy = Sum_Jy + ( (Iy_sorted(jjj)*Iy_sorted(jjj)) /( J0y+(Iy_sorted(jjj)*Iy_sorted(jjj)) ) )
-  ENDDO jjj_loop_ray2
-
-  !     Summ of step-function for Ex/Ey evaluation
-  !     Kahan summation algorithm
-  Summ_x = zero
-  Summ_y = zero
-  c_sumx = zero
-  c_sumy = zero
-  alpha = get_value('run ', 'alpha ')
-!!!!!$OMP PARALLEL PRIVATE(iii,a_sum,c_sumx,c_sumy,y_sumx,y_sumy,t_sumx,t_sumy)
-!!!!!$OMP DO REDUCTION(+:Summ_x,Summ_y)
-  Summ_loop: DO iii=1,N_for_I    !!! the first particle is shifted
-     a_sum = Log(one-(alpha+dble(iii-1))/N_for_I_dble)
-     y_sumx = (Ix_sorted(iii)/(Ix_sorted(iii)*Ix_sorted(iii)+J0x))*a_sum/Sum_Jx-c_sumx
-     y_sumy = (Iy_sorted(iii)/(Iy_sorted(iii)*Iy_sorted(iii)+J0y))*a_sum/Sum_Jy-c_sumy
-     t_sumx = Summ_x + y_sumx
-     t_sumy = Summ_y + y_sumy
-     c_sumx = (t_sumx-Summ_x) - y_sumx
-     c_sumy = (t_sumy-Summ_y) - y_sumy
-     Summ_x = t_sumx
-     Summ_y = t_sumy
-  ENDDO Summ_loop
-!!!!!$OMP END DO
-!!!!!$OMP END PARALLEL
-  Ey_rms = -one/Summ_y
-  Ex_rms = -one/Summ_x
-
-  return
-END subroutine ixy_fitting
-
-subroutine ixy_calcs(betas, orbit, z,          &
-                     betax_start, betay_start, &
-                     alfax_start, alfay_start, &
-                     gamax_start, gamay_start, &
-                     dx_start,    dpx_start,   &
-                     dy_start,    dpy_start)
-  use name_lenfi
-  use bbfi
-  use spch_bbfi
-  use math_constfi, only : two
-  implicit none
-  double precision :: betas, orbit(6), z(6,N_macro_surv)
-  double precision :: betax_start, betay_start
-  double precision :: alfax_start, alfay_start
-  double precision :: gamax_start, gamay_start
-  double precision :: dx_start,    dpx_start
-  double precision :: dy_start,   dpy_start
-  logical :: sc_chrom_fix
-  integer :: get_option
-
-  integer :: i
-  double precision :: dpi, xi, pxi, yi, pyi
-  !-----------------------------------------------------------------------
-
-  !      DPI=pt_000KK/beta_part_ini; z_part=t_000KK*beta_part_ini;
-  !      XI=x_000KK-dx_start*DPI; PXI=px_000KK-dpx_start*DPI;
-  !      YI=y_000KK-dy_start*DPI; PYI=py_000KK-dpy_start*DPI;
-  !      Ix=(gamax_start*XI*XI+2*alfax_start*XI*PXI+betax_start*PXI*PXI)/2;
-  !      Iy=(gamay_start*YI*YI+2*alfay_start*YI*PYI+betay_start*PYI*PYI)/2;
-
-  sc_chrom_fix = get_option('sc_chrom_fix ') .ne. 0 !! frs add-on
-  do i=1,N_macro_surv
-     ! Exact formulation might be too computational time costly
-     !        DPI=(sqrt((one+z(6,i)*betas)**2-gammas**(-2)))/betas-one
-     if(sc_chrom_fix .eqv. .true.) then !! frs add-on
-        DPI = z(6,i) - orbit(6)
-     else
-        DPI = (z(6,i) - orbit(6)) / betas !! orignal
-     endif
-     XI  =  z(1,i) - orbit(1) - dx_start  * DPI
-     PXI =  z(2,i) - orbit(2) - dpx_start * DPI
-     YI  =  z(3,i) - orbit(3) - dy_start  * DPI
-     PYI =  z(4,i) - orbit(4) - dpy_start * DPI
-
-     Ix_array(i) = (gamax_start*XI*XI + two*alfax_start*XI*PXI + betax_start*PXI*PXI) / two
-     Iy_array(i) = (gamay_start*YI*YI + two*alfay_start*YI*PYI + betay_start*PYI*PYI) / two
-     dpi_array(i) = DPI
-     if(sc_chrom_fix .eqv. .true.) then !! frs add-on
-       z_part_array(i)=z(5,i) - orbit(5)
-     else
-       z_part_array(i) = (z(5,i)-orbit(5))*betas !! orignal
-     endif
-  enddo
-
-end subroutine ixy_calcs
-
-subroutine table_input( betx_start, bety_start, &
-                        alfx_start, alfy_start, &
-                        gamx_start, gamy_start, &
-                        dx_start,    dpx_start, &
-                        dy_start,    dpy_start)
-  use name_lenfi
-  use bbfi
-  use twtrrfi
-  use time_varfi
-  use spch_bbfi
-  use math_constfi, only : zero, one
-  implicit none
-  double precision :: betx_start, bety_start
-  double precision :: alfx_start, alfy_start
-  double precision :: gamx_start, gamy_start
-  double precision :: dx_start,   dpx_start
-  double precision :: dy_start,   dpy_start
-
-  integer :: i, ii, j, flag, range(2)
-  double precision :: position
-  character(len=name_len) :: name
-  character(len=20) :: text
-
-  integer :: double_from_table_row, string_from_table_row, advance_to_pos
-  double precision, parameter :: cme10=1d-10
-
-  MYFIELD = zero
-  PHASE_TROMB = zero
-  CAV_VOLT = zero
-  TIME_VAR_M_IND = zero
-  TIME_VAR_P_IND = zero
-  TIME_VAR_C_IND = zero
-  TIME_VAR_M_NT  = zero
-  TIME_VAR_P_NT  = zero
-  TIME_VAR_C_NT  = zero
-
-  call table_range('spch_bb ', '#s/#e ', range)
-  print *, 'Range for Table spch_bb : ', range(1), range(2)
-  if (range(1).eq.0 .and. range(2).eq.0) print *," Info: Table spch_bb is empty "
-
-  name=" "
-  if (range(2).gt.bbd_max) then
-     write(text, '(1p,i8)') bbd_max
-     call fort_fail('TRRUN: Fatal: ', &
-          'overrun of the number of BB elements in table spch_bb =' // text)
-  endif
-  N_spch = range(2)-range(1)
-  if (N_spch.lt.1) &
-       call fort_fail('TRRUN: Fatal: ', 'Table: spch_bb holds no BB elements')
-
-  do i = range(1), range(2)
-     j = advance_to_pos('spch_bb ', i)
-     if (i .eq. range(1)) then
-        flag = string_from_table_row('spch_bb ', 'name ', i, name); if (flag.ne.0) goto 98
-        flag = double_from_table_row('spch_bb ', 's ',i, position); if (flag.ne.0) goto 98
-        if (name(:10).ne."RING$START" .and. position.ne.zero) then
-           write(text, '(1p,i8)') i
-           call fort_fail('TRRUN: Fatal: ', &
-                'Global TWISS not readable from table spch_bb'// text)
-        endif
-        flag = double_from_table_row('spch_bb ', 'betx ', i, betx_start); if (flag.ne.0) goto 98
-        flag = double_from_table_row('spch_bb ', 'bety ', i, bety_start); if (flag.ne.0) goto 98
-        if (abs(betx_start).lt.cme10 .or. abs(bety_start).lt.cme10) then
-           write(text, '(1p,i8)') i
-           call fort_fail('TRRUN: Fatal: ', &
-                'start beta values from TWISS table smaller than '// &
-                '1e-10, location: ' // text)
-        endif
-        flag = double_from_table_row('spch_bb ', 'alfx ', i, alfx_start); if (flag.ne.0) goto 98
-        flag = double_from_table_row('spch_bb ', 'alfy ', i, alfy_start); if (flag.ne.0) goto 98
-        gamx_start = (one+alfx_start*alfx_start)/betx_start
-        gamy_start = (one+alfy_start*alfy_start)/bety_start
-        flag = double_from_table_row('spch_bb ', 'dx ', i,  dx_start); if (flag.ne.0) goto 98
-        flag = double_from_table_row('spch_bb ', 'dpx ', i, dpx_start); if (flag.ne.0) goto 98
-        flag = double_from_table_row('spch_bb ', 'dy ', i,  dy_start); if (flag.ne.0) goto 98
-        flag = double_from_table_row('spch_bb ', 'dpy ', i, dpy_start); if (flag.ne.0) goto 98
-     else
-        ii=i-1
-        flag = string_from_table_row('spch_bb ', 'name ', i, spch_bb_name(ii)); if (flag.ne.0) goto 98
-        flag = double_from_table_row('spch_bb ', 'betx ', i, betx_bb(ii)); if (flag.ne.0) goto 98
-        flag = double_from_table_row('spch_bb ', 'bety ', i, bety_bb(ii)); if (flag.ne.0) goto 98
-        if (abs(betx_bb(ii)).lt.cme10 .or. abs(bety_bb(ii)).lt.cme10) then
-           write(text, '(1p,i8)') i
-           call fort_fail('TRRUN: Fatal: ', &
-                'BB beta values from TWISS table smaller '// &
-                'than 1e-10 at location:  '//text)
-        endif
-        flag = double_from_table_row('spch_bb ', 'alfx ', i, alfx_bb(ii)); if (flag.ne.0) goto 98
-        flag = double_from_table_row('spch_bb ', 'alfy ', i, alfy_bb(ii)); if (flag.ne.0) goto 98
-        gamx_bb(ii) = (one+alfx_bb(ii)*alfx_bb(ii))/betx_bb(ii)
-        gamy_bb(ii) = (one+alfy_bb(ii)*alfy_bb(ii))/bety_bb(ii)
-        flag = double_from_table_row('spch_bb ', 'dx ', i,  dx_bb(ii)); if (flag.ne.0) goto 98
-        flag = double_from_table_row('spch_bb ', 'dy ', i,  dy_bb(ii)); if (flag.ne.0) goto 98
-     endif
-  enddo
-  goto 99
-
-98 write(text, '(1p,i8)') i
-   call fort_fail('TRRUN: Fatal: ', 'Table: spch_bb corrupted at row =' // text)
-
-99 continue
-   call table_range('time_var_mul ', '#s/#e ', range)
-   print *, 'Range for Table time_var_mul: ', range(1), range(2)
-   if (range(1).eq.0 .and. range(2).eq.0) then
-      print*," Info: Table time_var_mul is empty "
-      goto 102
-   endif
-   name=" "
-   if (range(2).gt.n_time_var) then
-      write(text, '(1p,i8)') n_time_var
-      call fort_fail('TRRUN: Fatal: ', 'overrun of time varying mult arrays =' // text)
-   endif
-   do i=range(1),range(2)
-      j = advance_to_pos('time_var_mul ', i)
-      flag = double_from_table_row('time_var_mul ', 'number ',i, time_var_m_ind(i)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'turn ',i, time_var_m_nt(i)); if (flag.ne.0) goto 101
-      flag = string_from_table_row('time_var_mul ', 'name ', i, time_var_m_ch(i)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dkn0 ',i, myfield(i,1,0)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dks0 ',i, myfield(i,1,1)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dkn1 ',i, myfield(i,1,2)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dks1 ',i, myfield(i,1,3)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dkn2 ',i, myfield(i,1,4)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dks2 ',i, myfield(i,1,5)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dkn3 ',i, myfield(i,1,6)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dks3 ',i, myfield(i,1,7)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dkn4 ',i, myfield(i,1,8)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dks4 ',i, myfield(i,1,9)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dkn5 ',i, myfield(i,1,10)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dks5 ',i, myfield(i,2,0)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dkn6 ',i, myfield(i,2,1)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dks6 ',i, myfield(i,2,2)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dkn7 ',i, myfield(i,2,3)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dks7 ',i, myfield(i,2,4)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dkn8 ',i, myfield(i,2,5)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dks8 ',i, myfield(i,2,6)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dkn9 ',i, myfield(i,2,7)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dks9 ',i, myfield(i,2,8)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dkn10 ',i, myfield(i,2,9)); if (flag.ne.0) goto 101
-      flag = double_from_table_row('time_var_mul ', 'dks10 ',i, myfield(i,2,10)); if (flag.ne.0) goto 101
-   enddo
-   goto 102
-
-101 write(text, '(1p,i8)') i
-   call fort_fail('TRRUN: Fatal: ', 'Table: time_var_mul corrupted at row =' // text)
-
-102 continue
-    call table_range('time_var_pha ', '#s/#e ', range)
-    print *, 'Range for Table time_var_pha: ', range(1), range(2)
-    if (range(1).eq.0 .and. range(2).eq.0) then
-       print*," Info: Table time_var_pha is empty "
-       goto 104
-    endif
-    name=" "
-    if (range(2).gt.n_time_var) then
-       write(text, '(1p,i8)') n_time_var
-       call fort_fail('TRRUN: Fatal: ', 'overrun of time varying pha arrays =' // text)
-    endif
-    do i=range(1),range(2)
-       j = advance_to_pos('time_var_pha ', i)
-       flag = double_from_table_row('time_var_pha ', 'number ',i, time_var_p_ind(i)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'turn ',i, time_var_p_nt(i)); if (flag.ne.0) goto 103
-       flag = string_from_table_row('time_var_pha ', 'name ', i, time_var_p_ch(i)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm11 ',i, phase_tromb(i,1)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm12 ',i, phase_tromb(i,2)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm13 ',i, phase_tromb(i,3)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm14 ',i, phase_tromb(i,4)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm15 ',i, phase_tromb(i,5)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm16 ',i, phase_tromb(i,6)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm21 ',i, phase_tromb(i,7)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm22 ',i, phase_tromb(i,8)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm23 ',i, phase_tromb(i,9)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm24 ',i, phase_tromb(i,10)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm25 ',i, phase_tromb(i,11)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm26 ',i, phase_tromb(i,12)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm31 ',i, phase_tromb(i,13)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm32 ',i, phase_tromb(i,14)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm33 ',i, phase_tromb(i,15)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm34 ',i, phase_tromb(i,16)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm35 ',i, phase_tromb(i,17)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm36 ',i, phase_tromb(i,18)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm41 ',i, phase_tromb(i,19)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm42 ',i, phase_tromb(i,20)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm43 ',i, phase_tromb(i,21)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm44 ',i, phase_tromb(i,22)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm45 ',i, phase_tromb(i,23)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm46 ',i, phase_tromb(i,24)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm51 ',i, phase_tromb(i,25)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm52 ',i, phase_tromb(i,26)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm53 ',i, phase_tromb(i,27)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm54 ',i, phase_tromb(i,28)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm55 ',i, phase_tromb(i,29)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm56 ',i, phase_tromb(i,30)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm61 ',i, phase_tromb(i,31)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm62 ',i, phase_tromb(i,32)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm63 ',i, phase_tromb(i,33)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm64 ',i, phase_tromb(i,34)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm65 ',i, phase_tromb(i,35)); if (flag.ne.0) goto 103
-       flag = double_from_table_row('time_var_pha ', 'rm66 ',i, phase_tromb(i,36)); if (flag.ne.0) goto 103
-    enddo
-    goto 104
-
-103 write(text, '(1p,i8)') i
-    call fort_fail('TRRUN: Fatal: ', 'Table: time_var_pha corrupted at row =' // text)
-
-104 continue
-    call table_range('time_var_cav ', '#s/#e ', range)
-    print *, 'Range for Table time_var_cav: ', range(1), range(2)
-    if (range(1).eq.0 .and. range(2).eq.0) then
-       print*," Info: Table time_var_cav is empty "
-       goto 106
-    endif
-    name=" "
-    if (range(2).gt.n_time_var) then
-       write(text, '(1p,i8)') n_time_var
-       call fort_fail('TRRUN: Fatal: ', 'overrun of time varying cav arrays =' // text)
-    endif
-    do i=range(1),range(2)
-       j = advance_to_pos('time_var_cav ', i)
-       flag = double_from_table_row('time_var_cav ', 'number ',i, time_var_c_ind(i)); if (flag.ne.0) goto 105
-       flag = double_from_table_row('time_var_cav ', 'turn ',i, time_var_c_nt(i)); if (flag.ne.0) goto 105
-       flag = string_from_table_row('time_var_cav ', 'name ', i, time_var_c_ch(i)); if (flag.ne.0) goto 105
-       flag = double_from_table_row('time_var_cav ', 'volt ',i, cav_volt(i)); if (flag.ne.0) goto 105
-    enddo
-    goto 106
-
-105 write(text, '(1p,i8)') i
-    call fort_fail('TRRUN: Fatal: ', 'Table: time_var_cav corrupted at row =' // text)
-
-106 continue
-end subroutine table_input
 
 subroutine ttnllens(track,ktrack)
   use math_constfi, only : zero, one, two, half, pi
@@ -4682,7 +3961,6 @@ subroutine ttrfmult(track, ktrack, turn)
       field_cos(2,iord) = bvk * (skew(iord)   * cos(psl(iord) * twopi - krf * z) + field(2,iord))
       field_sin(2,iord) = bvk * (skew(iord)   * sin(psl(iord) * twopi - krf * z))
     enddo
-
     Cm2 = zero; Sm2 = zero; Cm1 = zero; Sm1 = zero;
     Cp0 = zero; Sp0 = zero; Cp1 = zero; Sp1 = zero;
 
@@ -4916,20 +4194,20 @@ subroutine tttquad(track, ktrack)
   double precision :: f_errors(0:maxferr)
   integer, external :: node_fd_errors, el_par_vector
   integer :: n_ferr
-  elpar_vl = el_par_vector(q_k1s, g_elpar)
+  
   !gamma = get_value('probe ','gamma ')
   !beta = get_value('probe ','beta ')
 
   !---- Read-in the parameters
-  elpar_vl = el_par_vector(r_freq, g_elpar)
+  elpar_vl = el_par_vector(q_k1st, g_elpar)
   
   length = node_value('l ');
   tilt = g_elpar(q_tilt)
 
   f_errors = zero
   n_ferr = node_fd_errors(f_errors)
-  k1  = g_elpar(q_k1)
-  k1s = g_elpar(q_k1s)
+  k1  = g_elpar(q_k1)  + g_elpar(q_k1t)
+  k1s = g_elpar(q_k1s) + g_elpar(q_k1st)
   
   !k1  = node_value('k1 ')
   !k1s = node_value('k1s ')
@@ -5150,7 +4428,7 @@ subroutine tttdipole(track, ktrack, code)
   endif
   !---- Apply entrance dipole edge effect
   if (node_value('kill_ent_fringe ') .eq. zero) &
-       call ttdpdg_map(track, ktrack, e1, h, hgap, fint, zero)
+       call ttdpdg_map(track, ktrack, e1, k0, hgap, fint, zero)
 
   !---- Prepare to calculate the kick and the matrix elements
   do jtrk = 1,ktrack
@@ -5239,7 +4517,7 @@ subroutine tttdipole(track, ktrack, code)
   !---- Apply exit dipole edge effect
   if (node_value('kill_exi_fringe ') .eq. zero) then
      if (fintx .lt. zero) fintx = fint
-     call ttdpdg_map(track, ktrack, e2, h, hgap, fintx, zero)
+     call ttdpdg_map(track, ktrack, e2, k0, hgap, fintx, zero)
   endif
 
 end subroutine tttdipole

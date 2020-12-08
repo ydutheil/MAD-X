@@ -36,6 +36,7 @@ extern struct command* current_weight;  /* current weight clone */
 extern struct command* current_match;   /* current match comm. */
 extern struct command* current_eopt;    /* to keep eoption command */
 extern struct command* threader_par;    /* threader parameters */
+extern struct command* current_format_f;   /* current formats */
 
 extern struct command_list* beam_list;         /* list of all beam commands */
 extern struct command_list* beta0_list;        /* list of user defined beta0s */
@@ -319,8 +320,8 @@ extern char
            tag_type[MAX_TAG][16],
            tag_code[MAX_TAG][16];
 
-time_t     last_time,
-           start_time;
+extern time_t last_time,
+              start_time;
 
 extern char filenames[100][500];
 extern int  currentline[100];

@@ -414,7 +414,7 @@ scan_expr(int c_item, char** item)   /* split input */
       if (l_cat == cat->max)  grow_int_array(cat);
       if (l_cat == cat_doubles->max) grow_double_array(cat_doubles);
       cat->i[l_cat] = 3;
-      cat_doubles->a[l_cat++] = atof(item[i]);
+      cat_doubles->a[l_cat++] = myatof(item[i]);
     }
     else if (is_operator(c))
     {
@@ -443,12 +443,11 @@ compound_expr(struct expression* e1, double v1, const char* oper, struct express
   char tmp[30], op[30];
   int n;
   strcpy(op, oper);
-  if(parentheses== 0) { //In this way if no parenthesis are chosen they 
+  if(parentheses== 0) { //In this way if no parenthesis are chosen they
     lb[0] =  (char) 0;
     rb[0] =  (char) 0;
-    if(e2->string[0]=='-') op[0] =' ';
+    if(e2 && e2->string[0]=='-') op[0] =' ';
   }
-  
   if (e1 != NULL || e2 != NULL)
   {
     if (e1 != NULL)
